@@ -5,14 +5,12 @@
 #  Modified by Shihao Wang
 # ------------------------------------------------------------------------
 import numpy as np
-from mmdet.datasets.builder import PIPELINES
-from mmcv.parallel import DataContainer as DC
-from mmdet3d.core.points import BasePoints
-from mmdet.datasets.pipelines import to_tensor
-from mmdet3d.datasets.pipelines import DefaultFormatBundle
+from mmdet3d.registry import TRANSFORMS
+from mmdet3d.structures.points import BasePoints
+from mmdet3d.datasets.transforms import Pack3DDetInputs
 
-@PIPELINES.register_module()
-class PETRFormatBundle3D(DefaultFormatBundle):
+@TRANSFORMS.register_module()
+class PETRFormatBundle3D(Pack3DDetInputs):
     """Default formatting bundle.
 
     It simplifies the pipeline of formatting common fields for voxels,
@@ -28,7 +26,18 @@ class PETRFormatBundle3D(DefaultFormatBundle):
     """
 
     def __init__(self, class_names, collect_keys, with_gt=True, with_label=True):
-        super(PETRFormatBundle3D, self).__init__()
+        # Pack3DDetInputs is the MMDetection3D 1.x replacement for the
+        # removed DataContainer-based DefaultFormatBundle.
+        keys = ['img']
+        if with_gt:
+            keys += ['gt_bboxes_3d', 'gt_labels_3d', 'gt_bboxes',
+                     'gt_bboxes_labels']
+        super(PETRFormatBundle3D, self).__init__(
+            keys=tuple(keys),
+            meta_keys=tuple(collect_keys) + (
+                'centers2d', 'depths', 'filename', 'ori_shape', 'img_shape',
+                'pad_shape', 'scale_factor', 'flip', 'box_mode_3d',
+                'box_type_3d', 'img_norm_cfg', 'scene_token', 'sample_idx'))
         self.class_names = class_names
         self.with_gt = with_gt
         self.with_label = with_label
@@ -46,18 +55,7 @@ class PETRFormatBundle3D(DefaultFormatBundle):
         # Format 3D data
         if 'points' in results:
             assert isinstance(results['points'], BasePoints)
-            results['points'] = DC(results['points'].tensor)
-
-        for key in self.collect_keys:
-            if key in ['timestamp',  'img_timestamp']:
-                 results[key] = DC(to_tensor(np.array(results[key], dtype=np.float64)))
-            else:
-                 results[key] = DC(to_tensor(np.array(results[key], dtype=np.float32)))
-
-        for key in ['voxels', 'coors', 'voxel_centers', 'num_points']:
-            if key not in results:
-                continue
-            results[key] = DC(to_tensor(results[key]), stack=False)
+            results['points'] = results['points'].tensor
 
         if self.with_gt:
             # Clean GT bboxes in the final
@@ -102,8 +100,7 @@ class PETRFormatBundle3D(DefaultFormatBundle):
                         for n in results['gt_names_3d']
                     ],
                                                        dtype=np.int64)
-        results = super(PETRFormatBundle3D, self).__call__(results)
-        return results
+        return super(PETRFormatBundle3D, self).transform(results)
 
     def __repr__(self):
         """str: Return a string that describes the module."""

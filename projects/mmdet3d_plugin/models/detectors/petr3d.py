@@ -10,14 +10,15 @@
 #  Modified by Shihao Wang
 # ------------------------------------------------------------------------
 import torch
-from mmcv.runner import force_fp32, auto_fp16
-from mmdet.models import DETECTORS
-from mmdet3d.core import bbox3d2result
+import numpy as np
+from mmdet3d.registry import MODELS
+from mmdet3d.structures import bbox3d2result
+from mmengine.structures import InstanceData
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
 from projects.mmdet3d_plugin.models.utils.misc import locations
 
-@DETECTORS.register_module()
+@MODELS.register_module()
 class Petr3D(MVXTwoStageDetector):
     """Petr3D."""
 
@@ -43,12 +44,24 @@ class Petr3D(MVXTwoStageDetector):
                  position_level=0,
                  aux_2d_only=True,
                  single_test=False,
-                 pretrained=None):
-        super(Petr3D, self).__init__(pts_voxel_layer, pts_voxel_encoder,
-                             pts_middle_encoder, pts_fusion_layer,
-                             img_backbone, pts_backbone, img_neck, pts_neck,
-                             pts_bbox_head, img_roi_head, img_rpn_head,
-                             train_cfg, test_cfg, pretrained)
+                 pretrained=None,
+                 data_preprocessor=None,
+                 init_cfg=None):
+        super(Petr3D, self).__init__(
+            pts_voxel_encoder=pts_voxel_encoder,
+            pts_middle_encoder=pts_middle_encoder,
+            pts_fusion_layer=pts_fusion_layer,
+            img_backbone=img_backbone,
+            pts_backbone=pts_backbone,
+            img_neck=img_neck,
+            pts_neck=pts_neck,
+            pts_bbox_head=pts_bbox_head,
+            img_roi_head=img_roi_head,
+            img_rpn_head=img_rpn_head,
+            train_cfg=train_cfg,
+            test_cfg=test_cfg,
+            init_cfg=init_cfg,
+            data_preprocessor=data_preprocessor)
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
         self.prev_scene_token = None
@@ -95,7 +108,6 @@ class Petr3D(MVXTwoStageDetector):
         return img_feats_reshaped
 
 
-    @auto_fp16(apply_to=('img'), out_fp32=True)
     def extract_feat(self, img, T, training_mode=False):
         """Extract features from images and points."""
         img_feats = self.extract_img_feat(img, T, training_mode)
@@ -200,8 +212,8 @@ class Petr3D(MVXTwoStageDetector):
         else:
             return None
 
-    @force_fp32(apply_to=('img'))
-    def forward(self, return_loss=True, **data):
+    def forward(self, inputs=None, data_samples=None, mode='tensor',
+                return_loss=None, **data):
         """Calls either forward_train or forward_test depending on whether
         return_loss=True.
         Note this setting will change the expected inputs. When
@@ -211,12 +223,94 @@ class Petr3D(MVXTwoStageDetector):
         list[list[dict]]), with the outer list indicating test time
         augmentations.
         """
+        if inputs is not None:
+            if mode == 'predict':
+                return self._predict(inputs, data_samples)
+            data = self._unpack_data_samples(inputs, data_samples)
+            return_loss = mode == 'loss'
+        elif return_loss is None:
+            return_loss = mode == 'loss'
         if return_loss:
             for key in ['gt_bboxes_3d', 'gt_labels_3d', 'gt_bboxes', 'gt_labels', 'centers2d', 'depths', 'img_metas']:
                 data[key] = list(zip(*data[key]))
             return self.forward_train(**data)
         else:
             return self.forward_test(**data)
+
+    def _unpack_data_samples(self, inputs, data_samples):
+        """Adapt MMEngine batches to StreamPETR's unchanged temporal API."""
+        img = inputs['img']
+        if isinstance(img, (list, tuple)):
+            img = torch.stack(img)
+        if img.dim() == 5:
+            img = img.unsqueeze(1)
+        device = img.device
+        samples = list(data_samples)
+
+        def frame(values):
+            return [[value] for value in values]
+
+        def to_device_list(value):
+            if isinstance(value, (list, tuple)):
+                return [to_device_list(item) for item in value]
+            if isinstance(value, np.ndarray):
+                return torch.as_tensor(value, device=device)
+            return value.to(device) if torch.is_tensor(value) else value
+
+        img_metas = []
+        for sample in samples:
+            meta = dict(sample.metainfo)
+            meta['gt_bboxes_3d'] = sample.gt_instances_3d.bboxes_3d
+            meta['gt_labels_3d'] = sample.gt_instances_3d.labels_3d
+            img_metas.append(meta)
+
+        result = dict(
+            img=img,
+            img_metas=frame(img_metas),
+            gt_bboxes_3d=frame([
+                sample.gt_instances_3d.bboxes_3d for sample in samples]),
+            gt_labels_3d=frame([
+                sample.gt_instances_3d.labels_3d for sample in samples]),
+            gt_bboxes=frame([to_device_list(sample.gt_instances.bboxes)
+                             for sample in samples]),
+            gt_labels=frame([to_device_list(sample.gt_instances.labels)
+                             for sample in samples]),
+            centers2d=frame([to_device_list(sample.metainfo['centers2d'])
+                             for sample in samples]),
+            depths=frame([to_device_list(sample.metainfo['depths'])
+                          for sample in samples]))
+
+        for key in ('lidar2img', 'intrinsics', 'extrinsics', 'timestamp',
+                    'img_timestamp', 'ego_pose', 'ego_pose_inv',
+                    'prev_exists'):
+            values = [sample.metainfo[key] for sample in samples]
+            array = np.asarray(values)
+            dtype = torch.float64 if key in ('timestamp', 'img_timestamp') \
+                else torch.float32
+            tensor = torch.as_tensor(array, dtype=dtype, device=device)
+            result[key] = tensor.unsqueeze(1)
+        return result
+
+    def _predict(self, inputs, data_samples):
+        img = inputs['img']
+        if isinstance(img, (list, tuple)):
+            img = torch.stack(img)
+        device = img.device
+        img_metas = [dict(sample.metainfo) for sample in data_samples]
+        data = dict(img=img)
+        for key in ('lidar2img', 'intrinsics', 'extrinsics', 'timestamp',
+                    'img_timestamp', 'ego_pose', 'ego_pose_inv'):
+            dtype = torch.float64 if key in ('timestamp', 'img_timestamp') \
+                else torch.float32
+            data[key] = torch.as_tensor(
+                np.asarray([meta[key] for meta in img_metas]),
+                dtype=dtype, device=device)
+        predictions = self.simple_test(img_metas, **data)
+        for sample, prediction in zip(data_samples, predictions):
+            result = prediction['pts_bbox']
+            sample.pred_instances_3d = InstanceData(**result)
+            sample.pred_instances = InstanceData()
+        return data_samples
 
     def forward_train(self,
                       img_metas=None,

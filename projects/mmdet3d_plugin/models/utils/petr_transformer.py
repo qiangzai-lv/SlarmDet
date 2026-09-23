@@ -18,20 +18,18 @@ from mmcv.cnn.bricks.transformer import (BaseTransformerLayer,
                                          build_attention,
                                          build_feedforward_network)
 from mmcv.cnn.bricks.drop import build_dropout
-from mmdet.models.utils.builder import TRANSFORMER
-from mmcv.cnn import build_norm_layer, xavier_init
-from mmcv.runner.base_module import BaseModule
-from mmcv.cnn.bricks.registry import (ATTENTION,TRANSFORMER_LAYER,
-                                      TRANSFORMER_LAYER_SEQUENCE)
-from mmcv.utils import deprecated_api_warning, ConfigDict
+from mmengine.registry import MODELS
+from mmcv.cnn import build_norm_layer
+from mmengine.model import BaseModule, xavier_init
+from mmengine.config import ConfigDict
+from mmengine.utils import deprecated_api_warning
 import copy
 from torch.nn import ModuleList
 from .attention import FlashMHA
 import torch.utils.checkpoint as cp
 
-from mmcv.runner import auto_fp16
 
-@ATTENTION.register_module()
+@MODELS.register_module()
 class PETRMultiheadFlashAttention(BaseModule):
     """A wrapper for ``torch.nn.MultiheadAttention``.
     This module implements MultiheadAttention with identity connection,
@@ -178,7 +176,6 @@ class MultiheadAttentionWrapper(nn.MultiheadAttention):
         super(MultiheadAttentionWrapper, self).__init__(*args, **kwargs)
         self.fp16_enabled = True
 
-    @auto_fp16(out_fp32=True)
     def forward_fp16(self, *args, **kwargs):
         return super(MultiheadAttentionWrapper, self).forward(*args, **kwargs)
 
@@ -191,7 +188,7 @@ class MultiheadAttentionWrapper(nn.MultiheadAttention):
         else:
             return self.forward_fp32( *args, **kwargs)
 
-@ATTENTION.register_module()
+@MODELS.register_module()
 class PETRMultiheadAttention(BaseModule):
     """A wrapper for ``torch.nn.MultiheadAttention``.
     This module implements MultiheadAttention with identity connection,
@@ -338,7 +335,7 @@ class PETRMultiheadAttention(BaseModule):
 
 
 
-@TRANSFORMER_LAYER_SEQUENCE.register_module()
+@MODELS.register_module()
 class PETRTransformerEncoder(TransformerLayerSequence):
     """TransformerEncoder of DETR.
     Args:
@@ -368,7 +365,7 @@ class PETRTransformerEncoder(TransformerLayerSequence):
         return x
 
 
-@TRANSFORMER_LAYER_SEQUENCE.register_module()
+@MODELS.register_module()
 class PETRTransformerDecoder(TransformerLayerSequence):
     """Implements the decoder in DETR transformer.
     Args:
@@ -419,7 +416,7 @@ class PETRTransformerDecoder(TransformerLayerSequence):
 
 
 
-@TRANSFORMER.register_module()
+@MODELS.register_module()
 class PETRTemporalTransformer(BaseModule):
     """Implements the DETR transformer.
     Following the official DETR implementation, this module copy-paste
@@ -509,7 +506,7 @@ class PETRTemporalTransformer(BaseModule):
         return  out_dec, memory
 
 
-@TRANSFORMER_LAYER.register_module()
+@MODELS.register_module()
 class PETRTemporalDecoderLayer(BaseModule):
     """Base `TransformerLayer` for vision transformer.
 
@@ -795,4 +792,3 @@ class PETRTemporalDecoderLayer(BaseModule):
             key_padding_mask,
         )
         return x
-

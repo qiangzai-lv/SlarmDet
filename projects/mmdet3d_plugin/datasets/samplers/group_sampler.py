@@ -11,14 +11,14 @@ import copy
 import torch.distributed as dist
 import numpy as np
 import torch
-from mmcv.runner import get_dist_info
+from mmengine.dist import get_dist_info
 from torch.utils.data import Sampler
-from .sampler import SAMPLER
+from mmdet3d.registry import DATA_SAMPLERS
 import random
 from IPython import embed
 
 
-@SAMPLER.register_module()
+@DATA_SAMPLERS.register_module()
 class DistributedGroupSampler(Sampler):
     """Sampler that restricts data loading to a subset of the dataset.
     It is especially useful in conjunction with
@@ -150,7 +150,7 @@ def sync_random_seed(seed=None, device='cuda'):
     dist.broadcast(random_num, src=0)
     return random_num.item()
 
-@SAMPLER.register_module()
+@DATA_SAMPLERS.register_module()
 class InfiniteGroupEachSampleInBatchSampler(Sampler):
     """
     Pardon this horrendous name. Basically, we want every sample to be from its own group.
@@ -160,8 +160,10 @@ class InfiniteGroupEachSampleInBatchSampler(Sampler):
     """
 
     def __init__(self, 
-                 dataset,
+                 dataset=None,
                  samples_per_gpu=1,
+                 batch_size=None,
+                 sampler=None,
                  num_replicas=None,
                  rank=None,
                  seed=0):
@@ -172,8 +174,9 @@ class InfiniteGroupEachSampleInBatchSampler(Sampler):
         if rank is None:
             rank = _rank
 
-        self.dataset = dataset
-        self.batch_size = samples_per_gpu
+        self.dataset = dataset if dataset is not None else sampler.dataset
+        self.sampler = sampler
+        self.batch_size = batch_size or samples_per_gpu
         self.num_replicas = num_replicas
         self.rank = rank
         self.seed = sync_random_seed(seed)

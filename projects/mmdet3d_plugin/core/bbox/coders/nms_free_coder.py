@@ -1,11 +1,11 @@
 import torch
 
-from mmdet.core.bbox import BaseBBoxCoder
-from mmdet.core.bbox.builder import BBOX_CODERS
+from mmdet.models.task_modules import BaseBBoxCoder
+from mmdet3d.registry import TASK_UTILS
 from projects.mmdet3d_plugin.core.bbox.util import denormalize_bbox
 
 
-@BBOX_CODERS.register_module()
+@TASK_UTILS.register_module()
 class NMSFreeCoder(BaseBBoxCoder):
     """Bbox coder for NMS-free detector.
     Args:

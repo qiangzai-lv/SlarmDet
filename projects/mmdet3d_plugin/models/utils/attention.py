@@ -15,11 +15,15 @@ from torch.nn.init import (
 from torch.nn.functional import linear
 
 from einops import rearrange
-from mmcv.runner import auto_fp16
-from mmcv.runner.base_module import BaseModule
 
-from flash_attn.flash_attn_interface import flash_attn_unpadded_kvpacked_func
-from flash_attn.bert_padding import unpad_input, pad_input, index_first_axis
+try:
+    from flash_attn.flash_attn_interface import flash_attn_unpadded_kvpacked_func
+    from flash_attn.bert_padding import unpad_input
+    _FLASH_ATTN_AVAILABLE = True
+except ImportError:
+    flash_attn_unpadded_kvpacked_func = None
+    unpad_input = None
+    _FLASH_ATTN_AVAILABLE = False
 
 
 def _in_projection_packed(q, k, v, w, b = None):
@@ -47,7 +51,6 @@ class FlashAttention(nn.Module):
         self.dropout_p = attention_dropout
         self.fp16_enabled = True
 
-    @auto_fp16(apply_to=('q', 'kv'), out_fp32=True)
     def forward(self, q, kv, 
                 causal=False, 
                 key_padding_mask=None):
@@ -58,6 +61,21 @@ class FlashAttention(nn.Module):
             kv: The tensor containing the key, and value. (B, S, 2, H, D) 
             key_padding_mask: a bool tensor of shape (B, S)
         """
+        if not _FLASH_ATTN_AVAILABLE:
+            # Keep imports and CPU smoke tests usable without the optional CUDA
+            # extension. Production CUDA environments use the branch below.
+            k, v = kv.unbind(dim=2)
+            q_ = q.transpose(1, 2)
+            k_ = k.transpose(1, 2)
+            v_ = v.transpose(1, 2)
+            output = torch.nn.functional.scaled_dot_product_attention(
+                q_, k_, v_, dropout_p=self.dropout_p if self.training else 0.0)
+            return output.transpose(1, 2), None
+
+        if q.dtype == torch.float32:
+            q = q.half()
+        if kv.dtype == torch.float32:
+            kv = kv.half()
         assert q.dtype in [torch.float16, torch.bfloat16] and kv.dtype in [torch.float16, torch.bfloat16]
         assert q.is_cuda and kv.is_cuda
         assert q.shape[0] == kv.shape[0] and q.shape[-2] == kv.shape[-2] and q.shape[-1] == kv.shape[-1]
@@ -93,7 +111,7 @@ class FlashAttention(nn.Module):
             )
             output = rearrange(output_unpad, '(b s) ... -> b s ...', b=batch_size)
 
-        return output, None
+        return output.float(), None
 
 
 class FlashMHA(nn.Module):

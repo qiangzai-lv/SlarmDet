@@ -6,19 +6,20 @@
 # ------------------------------------------------------------------------
 import torch
 import torch.nn as nn
-from mmcv.cnn import bias_init_with_prob
-from mmcv.runner import force_fp32
-from mmdet.core import (build_assigner, build_sampler, multi_apply,
-                        reduce_mean, bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh)
-from mmdet.models import HEADS, build_loss
-from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
+from mmengine.model import BaseModule, bias_init_with_prob
+from mmengine.structures import InstanceData
+from mmdet.registry import MODELS, TASK_UTILS
+from mmdet3d.registry import TASK_UTILS as MMDET3D_TASK_UTILS
+from mmdet.models.utils import multi_apply
+from mmdet.utils import reduce_mean
+from mmdet.structures.bbox import (bbox_cxcywh_to_xyxy,
+                                   bbox_xyxy_to_cxcywh, bbox_overlaps)
 from projects.mmdet3d_plugin.models.utils.misc import draw_heatmap_gaussian, apply_center_offset, apply_ltrb
-from mmdet.core import bbox_overlaps
 from mmdet3d.models.utils import clip_sigmoid
 import random
 
-@HEADS.register_module()
-class FocalHead(AnchorFreeHead):
+@MODELS.register_module()
+class FocalHead(BaseModule):
     """Implements the DETR transformer head.
     See `paper: End-to-End Object Detection with Transformers
     <https://arxiv.org/pdf/2005.12872>`_ for details.
@@ -47,6 +48,10 @@ class FocalHead(AnchorFreeHead):
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None
     """
+
+    def loss_by_feat(self, *args, **kwargs):
+        """Compatibility entry point required by MMDetection 3.x heads."""
+        return self.loss(*args, **kwargs)
     def __init__(self,
                  num_classes,
                  in_channels=256,
@@ -87,10 +92,12 @@ class FocalHead(AnchorFreeHead):
                 'when train_cfg is set.'
             assigner2d = train_cfg['assigner2d']
 
-            self.assigner2d = build_assigner(assigner2d)
+            self.assigner2d = MMDET3D_TASK_UTILS.build(
+                dict(assigner2d, _scope_='mmdet3d'))
             # DETR sampling=False, so use PseudoSampler
             sampler_cfg = dict(type='PseudoSampler')
-            self.sampler = build_sampler(sampler_cfg, context=self)
+            self.sampler = TASK_UTILS.build(
+                dict(sampler_cfg, _scope_='mmdet'))
 
         self.num_classes = num_classes
         self.in_channels = in_channels
@@ -104,15 +111,17 @@ class FocalHead(AnchorFreeHead):
         self.train_ratio=train_ratio
         self.infer_ratio=infer_ratio
 
-        super(FocalHead, self).__init__(num_classes, in_channels, init_cfg = init_cfg)
+        super(FocalHead, self).__init__(init_cfg=init_cfg)
 
 
 
-        self.loss_cls2d = build_loss(loss_cls2d)
-        self.loss_bbox2d = build_loss(loss_bbox2d)
-        self.loss_iou2d = build_loss(loss_iou2d)
-        self.loss_centers2d = build_loss(loss_centers2d)
-        self.loss_centerness = build_loss(loss_centerness)
+        self.loss_cls2d = MODELS.build(dict(loss_cls2d, _scope_='mmdet'))
+        self.loss_bbox2d = MODELS.build(dict(loss_bbox2d, _scope_='mmdet'))
+        self.loss_iou2d = MODELS.build(dict(loss_iou2d, _scope_='mmdet'))
+        self.loss_centers2d = MODELS.build(dict(loss_centers2d, _scope_='mmdet'))
+        self.loss_centerness = MODELS.build(dict(loss_centerness, _scope_='mmdet'))
+        self.cls_out_channels = (
+            num_classes if self.loss_cls2d.use_sigmoid else num_classes + 1)
 
         self._init_layers()
 
@@ -192,7 +201,6 @@ class FocalHead(AnchorFreeHead):
 
         return outs
     
-    @force_fp32(apply_to=('preds_dicts'))
     def loss(self,
              gt_bboxes2d_list,
              gt_labels2d_list,
@@ -227,6 +235,10 @@ class FocalHead(AnchorFreeHead):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
+        preds_dicts = {
+            key: value.float() if torch.is_tensor(value) else value
+            for key, value in preds_dicts.items()
+        }
         assert gt_bboxes_ignore is None, \
             f'{self.__class__.__name__} only supports ' \
             f'for gt_bboxes_ignore setting to None.'
@@ -490,7 +502,10 @@ class FocalHead(AnchorFreeHead):
         # assigner and sampler
         assign_result = self.assigner2d.assign(bbox_pred, cls_score, pred_centers2d, gt_bboxes,
                                                gt_labels, centers2d, img_meta, gt_bboxes_ignore)
-        sampling_result = self.sampler.sample(assign_result, bbox_pred, gt_bboxes)
+        sampling_result = self.sampler.sample(
+            assign_result,
+            InstanceData(priors=bbox_pred),
+            InstanceData(bboxes=gt_bboxes, labels=gt_labels))
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
 

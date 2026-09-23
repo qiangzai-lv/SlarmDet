@@ -1,6 +1,6 @@
 _base_ = [
-    '../../../mmdetection3d/configs/_base_/datasets/nus-3d.py',
-    '../../../mmdetection3d/configs/_base_/default_runtime.py'
+    '../_base_/configs/_base_/datasets/nus-3d.py',
+    '../_base_/configs/_base_/default_runtime.py'
 ]
 backbone_norm_cfg = dict(type='LN', requires_grad=True)
 plugin=True
