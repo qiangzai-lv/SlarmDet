@@ -72,6 +72,21 @@ def main():
     # load config
     cfg = Config.fromfile(args.config)
 
+    # torch_npu registers the ``npu`` device and HCCL backend with PyTorch.
+    # Import it before Runner construction so MMEngine can create the model
+    # and distributed process group on Ascend.  The import is conditional to
+    # keep the CUDA/CPU training entry point unchanged.
+    if cfg.get('device', None) == 'npu':
+        try:
+            import torch_npu  # noqa: F401
+        except ImportError as exc:
+            raise RuntimeError(
+                'This configuration requires torch_npu; install the '
+                'torch_npu/CANN stack on the Ascend host.') from exc
+        local_rank = int(os.environ.get('LOCAL_RANK', args.local_rank))
+        import torch
+        torch.npu.set_device(local_rank)
+
     # TODO: We will unify the ceph support approach with other OpenMMLab repos
     if args.ceph:
         cfg = replace_ceph_backend(cfg)

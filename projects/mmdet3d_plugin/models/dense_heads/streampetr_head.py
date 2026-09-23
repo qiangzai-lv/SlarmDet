@@ -460,7 +460,8 @@ class StreamPETRHead(BaseModule):
             labels = [getattr(img_meta['gt_labels_3d'], '_data',
                               img_meta['gt_labels_3d'])
                       for img_meta in img_metas]
-            known = [(torch.ones_like(t)).cuda() for t in labels]
+            # Keep DN masks on the labels' device (CUDA/NPU/CPU).
+            known = [torch.ones_like(t) for t in labels]
             know_idx = known
             unmask_bbox = unmask_label = torch.cat(known)
             #gt_num

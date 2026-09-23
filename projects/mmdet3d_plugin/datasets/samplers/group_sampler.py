@@ -116,7 +116,7 @@ class DistributedGroupSampler(Sampler):
         self.epoch = epoch
 
 
-def sync_random_seed(seed=None, device='cuda'):
+def sync_random_seed(seed=None, device=None):
     """Make sure different ranks share the same seed.
     All workers must call this function, otherwise it will deadlock.
     This method is generally used in `DistributedSampler`,
@@ -129,11 +129,20 @@ def sync_random_seed(seed=None, device='cuda'):
     to select non-overlapped data from the same data list.
     Args:
         seed (int, Optional): The seed. Default to None.
-        device (str): The device where the seed will be put on.
-            Default to 'cuda'.
+        device (str): The device where the seed will be put on.  If omitted,
+            choose the active accelerator so HCCL/NCCL broadcasts use the
+            correct backend.
     Returns:
         int: Seed to be used.
     """
+    if device is None:
+        if hasattr(torch, 'npu') and torch.npu.is_available():
+            device = 'npu'
+        elif torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
     if seed is None:
         seed = np.random.randint(2**31)
     assert isinstance(seed, int)

@@ -61,7 +61,9 @@ class FlashAttention(nn.Module):
             kv: The tensor containing the key, and value. (B, S, 2, H, D) 
             key_padding_mask: a bool tensor of shape (B, S)
         """
-        if not _FLASH_ATTN_AVAILABLE:
+        # flash-attn is a CUDA extension.  Even when it is importable, route
+        # non-CUDA tensors through the device-neutral PyTorch implementation.
+        if not _FLASH_ATTN_AVAILABLE or q.device.type != 'cuda':
             # Keep imports and CPU smoke tests usable without the optional CUDA
             # extension. Production CUDA environments use the branch below.
             k, v = kv.unbind(dim=2)

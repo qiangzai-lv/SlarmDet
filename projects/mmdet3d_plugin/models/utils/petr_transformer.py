@@ -73,8 +73,10 @@ class PETRMultiheadFlashAttention(BaseModule):
         self.num_heads = num_heads
         self.batch_first = True
 
-        self.attn = FlashMHA(embed_dims, num_heads, attn_drop, dtype=torch.float16, device='cuda',
-                                          **kwargs)
+        # Do not bind the module to CUDA during construction.  Parameters are
+        # moved by the runner to the selected device, including Ascend NPU.
+        self.attn = FlashMHA(embed_dims, num_heads, attn_drop,
+                             dtype=torch.float16, device=None, **kwargs)
 
         self.proj_drop = nn.Dropout(proj_drop)
         self.dropout_layer = build_dropout(
