@@ -65,12 +65,16 @@ class FlashAttention(nn.Module):
             # Keep imports and CPU smoke tests usable without the optional CUDA
             # extension. Production CUDA environments use the branch below.
             k, v = kv.unbind(dim=2)
-            q_ = q.transpose(1, 2)
-            k_ = k.transpose(1, 2)
-            v_ = v.transpose(1, 2)
+            # The original MMCV ``auto_fp16(out_fp32=True)`` decorator
+            # performed attention in the configured AMP dtype but restored an
+            # FP32 output. Match that contract for the torch fallback; keeping
+            # the softmax in FP16 can overflow and poison decoder gradients.
+            q_ = q.float().transpose(1, 2)
+            k_ = k.float().transpose(1, 2)
+            v_ = v.float().transpose(1, 2)
             output = torch.nn.functional.scaled_dot_product_attention(
                 q_, k_, v_, dropout_p=self.dropout_p if self.training else 0.0)
-            return output.transpose(1, 2), None
+            return output.transpose(1, 2).float(), None
 
         if q.dtype == torch.float32:
             q = q.half()

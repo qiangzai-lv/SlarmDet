@@ -111,7 +111,10 @@ class Petr3D(MVXTwoStageDetector):
     def extract_feat(self, img, T, training_mode=False):
         """Extract features from images and points."""
         img_feats = self.extract_img_feat(img, T, training_mode)
-        return img_feats
+        # Restore the legacy ``auto_fp16(out_fp32=True)`` contract. The
+        # temporal transformer and its LayerNorms are sensitive to FP16
+        # activations even when the backbone runs under AMP autocast.
+        return img_feats.float()
 
     def obtain_history_memory(self,
                             gt_bboxes_3d=None,
@@ -364,9 +367,17 @@ class Petr3D(MVXTwoStageDetector):
         else:
             data['img_feats'] = rec_img_feats
 
-        losses = self.obtain_history_memory(gt_bboxes_3d,
-                        gt_labels_3d, gt_bboxes,
-                        gt_labels, img_metas, centers2d, depths, gt_bboxes_ignore, **data)
+        # The legacy MMCV fp16 hook only autocast modules explicitly marked
+        # with ``auto_fp16``.  MMEngine's AmpOptimWrapper autocasts the whole
+        # model, which makes the temporal decoder and LayerNorm unstable in
+        # float16. Keep the image backbone under AMP, but run the StreamPETR
+        # temporal head and losses in float32.
+        with torch.autocast(device_type=data['img'].device.type,
+                            enabled=False):
+            losses = self.obtain_history_memory(
+                gt_bboxes_3d, gt_labels_3d, gt_bboxes,
+                gt_labels, img_metas, centers2d, depths,
+                gt_bboxes_ignore, **data)
 
         return losses
   

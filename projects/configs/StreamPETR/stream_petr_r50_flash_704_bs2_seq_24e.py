@@ -282,7 +282,10 @@ test_dataloader = dict(
     dataset=data['test'])
 optim_wrapper = dict(
     type='AmpOptimWrapper',
-    loss_scale='dynamic',
+    # The default GradScaler scale (65536) overflows the image-backbone
+    # gradients with the MMEngine autocast path before it can downscale.
+    # Start conservatively and let the scaler grow after stable updates.
+    loss_scale=dict(init_scale=128, growth_interval=2000),
     optimizer=dict(
         type=optimizer['type'], lr=optimizer['lr'],
         weight_decay=optimizer['weight_decay']),

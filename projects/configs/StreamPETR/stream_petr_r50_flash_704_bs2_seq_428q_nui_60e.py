@@ -1,7 +1,9 @@
 _base_ = [
-    '../../../mmdetection3d/configs/_base_/datasets/nus-3d.py',
-    '../../../mmdetection3d/configs/_base_/default_runtime.py'
+    '../_base_/datasets/nus-3d.py',
+    '../_base_/default_runtime.py'
 ]
+custom_imports = dict(
+    imports=['projects.mmdet3d_plugin'], allow_failed_imports=False)
 backbone_norm_cfg = dict(type='LN', requires_grad=True)
 plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
@@ -39,6 +41,7 @@ model = dict(
     num_frame_losses=num_frame_losses,
     use_grid_mask=True,
     img_backbone=dict(
+        _scope_='mmdet',
         init_cfg=dict(
             type='Pretrained', checkpoint="ckpts/cascade_mask_rcnn_r50_fpn_coco-20e_20e_nuim_20201009_124951-40963960.pth",
             prefix='backbone.'),       
@@ -57,6 +60,7 @@ model = dict(
         out_channels=256,
         num_outs=2),
     img_roi_head=dict(
+        _scope_='mmdet',
         type='FocalHead',
         num_classes=10,
         in_channels=256,
@@ -182,8 +186,6 @@ train_pipeline = [
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
     dict(type='PadMultiViewImage', size_divisor=32),
     dict(type='PETRFormatBundle3D', class_names=class_names, collect_keys=collect_keys + ['prev_exists']),
-    dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img', 'gt_bboxes', 'gt_labels', 'centers2d', 'depths', 'prev_exists'] + collect_keys,
-             meta_keys=('filename', 'ori_shape', 'img_shape', 'pad_shape', 'scale_factor', 'flip', 'box_mode_3d', 'box_type_3d', 'img_norm_cfg', 'scene_token', 'gt_bboxes_3d','gt_labels_3d'))
 ]
 test_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=True),
@@ -191,19 +193,11 @@ test_pipeline = [
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
     dict(type='PadMultiViewImage', size_divisor=32),
     dict(
-        type='MultiScaleFlipAug3D',
-        img_scale=(1333, 800),
-        pts_scale_ratio=1,
-        flip=False,
-        transforms=[
-            dict(
-                type='PETRFormatBundle3D',
-                collect_keys=collect_keys,
-                class_names=class_names,
-                with_label=False),
-            dict(type='Collect3D', keys=['img'] + collect_keys,
-            meta_keys=('filename', 'ori_shape', 'img_shape','pad_shape', 'scale_factor', 'flip', 'box_mode_3d', 'box_type_3d', 'img_norm_cfg', 'scene_token'))
-        ])
+        type='PETRFormatBundle3D',
+        collect_keys=collect_keys,
+        class_names=class_names,
+        with_gt=False,
+        with_label=False),
 ]
 
 data = dict(
@@ -212,7 +206,7 @@ data = dict(
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=data_root + 'nuscenes2d_temporal_infos_train.pkl',
+        ann_file='nuscenes2d_temporal_infos_train.pkl',
         num_frame_losses=num_frame_losses,
         seq_split_num=2, # streaming video training
         seq_mode=True, # streaming video training
@@ -225,14 +219,14 @@ data = dict(
         use_valid_flag=True,
         filter_empty_gt=False,
         box_type_3d='LiDAR'),
-    val=dict(type=dataset_type, pipeline=test_pipeline, collect_keys=collect_keys + ['img', 'img_metas'], queue_length=queue_length, ann_file=data_root + 'nuscenes2d_temporal_infos_val.pkl', classes=class_names, modality=input_modality),
-    test=dict(type=dataset_type, pipeline=test_pipeline, collect_keys=collect_keys + ['img', 'img_metas'], queue_length=queue_length, ann_file=data_root + 'nuscenes2d_temporal_infos_val.pkl', classes=class_names, modality=input_modality),
+    val=dict(type=dataset_type, data_root=data_root, pipeline=test_pipeline, collect_keys=collect_keys + ['img', 'img_metas'], queue_length=queue_length, ann_file='nuscenes2d_temporal_infos_val.pkl', classes=class_names, modality=input_modality),
+    test=dict(type=dataset_type, data_root=data_root, pipeline=test_pipeline, collect_keys=collect_keys + ['img', 'img_metas'], queue_length=queue_length, ann_file='nuscenes2d_temporal_infos_val.pkl', classes=class_names, modality=input_modality),
     shuffler_sampler=dict(type='InfiniteGroupEachSampleInBatchSampler'),
     nonshuffler_sampler=dict(type='DistributedSampler')
     )
 
 optimizer = dict(
-    type='AdamW', 
+    type='AdamW',
     lr=4e-4, # bs 8: 2e-4 || bs 16: 4e-4
     paramwise_cfg=dict(
         custom_keys={
@@ -251,9 +245,64 @@ lr_config = dict(
     )
 
 evaluation = dict(interval=num_iters_per_epoch*num_epochs, pipeline=test_pipeline)
-find_unused_parameters=False #### when use checkpoint, find_unused_parameters must be False
+# StreamPETR uses checkpointed decoder layers and has a fixed temporal graph.
+# DDP static_graph supports the reentrant checkpoint backward hooks while
+# allowing parameters that are intentionally unused on a given path.
+find_unused_parameters = False
+model_wrapper_cfg = dict(
+    type='MMDistributedDataParallel',
+    static_graph=True,
+    find_unused_parameters=False)
 checkpoint_config = dict(interval=num_iters_per_epoch, max_keep_ckpts=3)
 runner = dict(
     type='IterBasedRunner', max_iters=num_epochs * num_iters_per_epoch)
 load_from=None
 resume_from=None
+
+# MMEngine 0.10 runner equivalents of the legacy ``data``/``optimizer``
+# fields above.  Keep the legacy fields for downstream scripts that inspect
+# them, but use these entries for the actual Runner construction.
+train_dataloader = dict(
+    batch_size=batch_size,
+    num_workers=4,
+    persistent_workers=False,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    batch_sampler=dict(type='InfiniteGroupEachSampleInBatchSampler'),
+    dataset=data['train'])
+val_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=False,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=data['val'])
+test_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=False,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=data['test'])
+optim_wrapper = dict(
+    type='AmpOptimWrapper',
+    # The default GradScaler scale (65536) overflows the image-backbone
+    # gradients with the MMEngine autocast path before it can downscale.
+    # Start conservatively and let the scaler grow after stable updates.
+    loss_scale=dict(init_scale=128, growth_interval=2000),
+    optimizer=dict(
+        type=optimizer['type'], lr=optimizer['lr'],
+        weight_decay=optimizer['weight_decay']),
+    paramwise_cfg=optimizer['paramwise_cfg'],
+    clip_grad=dict(max_norm=35, norm_type=2))
+train_cfg = dict(type='IterBasedTrainLoop', max_iters=num_epochs * num_iters_per_epoch, val_interval=num_iters_per_epoch)
+val_cfg = dict(type='ValLoop')
+test_cfg = dict(type='TestLoop')
+val_evaluator = dict(
+    type='NuScenesMetric',
+    data_root=data_root,
+    ann_file=data_root + 'nuscenes2d_temporal_infos_val.pkl',
+    metric='bbox')
+test_evaluator = val_evaluator
+param_scheduler = [
+    dict(type='CosineAnnealingLR', T_max=num_epochs * num_iters_per_epoch,
+         eta_min=optimizer['lr'] * 1e-3, begin=0, end=num_epochs * num_iters_per_epoch,
+         by_epoch=False)
+]
