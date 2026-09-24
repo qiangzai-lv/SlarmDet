@@ -318,6 +318,8 @@ if __name__ == '__main__':
     from mmengine.registry import init_default_scope
     init_default_scope('mmdet3d')
 
+    args.version = 'v1.0-mini'
+
     if args.dataset == 'kitti':
         if args.only_gt_database:
             create_groundtruth_database(
