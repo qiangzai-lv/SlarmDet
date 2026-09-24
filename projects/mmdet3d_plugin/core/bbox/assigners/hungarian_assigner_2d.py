@@ -3,22 +3,12 @@
 #  Modified by Shihao Wang
 # ---------------------------------------------
 import torch
-from mmengine.structures import InstanceData
 
-from mmdet.models.task_modules import AssignResult, BaseAssigner
-from mmdet3d.registry import TASK_UTILS
-from mmdet.registry import TASK_UTILS as MMDET_TASK_UTILS
-
-
-def _build_cost(cfg):
-    """Build custom costs from mmdet3d, falling back to mmdet costs."""
-    try:
-        return TASK_UTILS.build(cfg)
-    except KeyError:
-        cfg = cfg.copy()
-        cfg.setdefault('_scope_', 'mmdet')
-        return MMDET_TASK_UTILS.build(cfg)
-from mmdet.structures.bbox import bbox_cxcywh_to_xyxy
+from mmdet.core.bbox.builder import BBOX_ASSIGNERS
+from mmdet.core.bbox.assigners import AssignResult
+from mmdet.core.bbox.assigners import BaseAssigner
+from mmdet.core.bbox.match_costs import build_match_cost
+from mmdet.core import bbox_cxcywh_to_xyxy
 
 try:
     from scipy.optimize import linear_sum_assignment
@@ -26,7 +16,7 @@ except ImportError:
     linear_sum_assignment = None
 
 
-@TASK_UTILS.register_module()
+@BBOX_ASSIGNERS.register_module()
 class HungarianAssigner2D(BaseAssigner):
     """Computes one-to-one matching between predictions and ground truth.
 
@@ -60,10 +50,10 @@ class HungarianAssigner2D(BaseAssigner):
                  reg_cost=dict(type='BBoxL1Cost', weight=1.0),
                  iou_cost=dict(type='IoUCost', iou_mode='giou', weight=1.0),
                  centers2d_cost=dict(type='BBox3DL1Cost', weight=1.0)):
-        self.cls_cost = _build_cost(cls_cost)
-        self.reg_cost = _build_cost(reg_cost)
-        self.iou_cost = _build_cost(iou_cost)
-        self.centers2d_cost = _build_cost(centers2d_cost)
+        self.cls_cost = build_match_cost(cls_cost)
+        self.reg_cost = build_match_cost(reg_cost)
+        self.iou_cost = build_match_cost(iou_cost)
+        self.centers2d_cost = build_match_cost(centers2d_cost)
 
     def assign(self,
                bbox_pred,
@@ -132,18 +122,13 @@ class HungarianAssigner2D(BaseAssigner):
 
         # 2. compute the weighted costs
         # classification and bboxcost.
-        cls_cost = self.cls_cost(
-            InstanceData(scores=cls_pred), InstanceData(labels=gt_labels))
+        cls_cost = self.cls_cost(cls_pred, gt_labels)
         # regression L1 cost
         normalize_gt_bboxes = gt_bboxes / factor
-        reg_cost = self.reg_cost(
-            InstanceData(bboxes=bbox_pred),
-            InstanceData(bboxes=normalize_gt_bboxes),
-            img_meta=dict(img_shape=(1, 1)))
+        reg_cost = self.reg_cost(bbox_pred, normalize_gt_bboxes)
         # regression iou cost, defaultly giou is used in official DETR.
         bboxes = bbox_cxcywh_to_xyxy(bbox_pred) * factor
-        iou_cost = self.iou_cost(
-            InstanceData(bboxes=bboxes), InstanceData(bboxes=gt_bboxes))
+        iou_cost = self.iou_cost(bboxes, gt_bboxes)
 
         # center2d L1 cost
         normalize_centers2d = centers2d / factor[:, 0:2]

@@ -11,22 +11,24 @@
 # ------------------------------------------------------------------------
 import torch
 import torch.nn as nn
-from mmengine.structures import InstanceData
-from mmcv.cnn import Linear
-from mmengine.model import BaseModule, bias_init_with_prob
-from mmdet.models.task_modules import AssignResult
-from mmdet.models.task_modules import PseudoSampler
-from mmdet.models.utils import multi_apply
-from mmdet.utils import reduce_mean
-from mmdet3d.registry import MODELS, TASK_UTILS
-from mmdet.registry import MODELS as MMDET_MODELS
-from mmdet.models.layers import NormedLinear, inverse_sigmoid
+from mmcv.cnn import Linear, bias_init_with_prob
+
+from mmcv.runner import force_fp32
+from mmdet.core import (build_assigner, build_sampler, multi_apply,
+                        reduce_mean)
+from mmdet.models.utils import build_transformer
+from mmdet.models import HEADS, build_loss
+from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
+from mmdet.models.utils.transformer import inverse_sigmoid
+from mmdet3d.core.bbox.coders import build_bbox_coder
 from projects.mmdet3d_plugin.core.bbox.util import normalize_bbox
+
+from mmdet.models.utils import NormedLinear
 from projects.mmdet3d_plugin.models.utils.positional_encoding import pos2posemb3d, pos2posemb1d, nerf_positional_encoding
 from projects.mmdet3d_plugin.models.utils.misc import MLN, topk_gather, transform_reference_points, memory_refresh, SELayer_Linear
 
-@MODELS.register_module()
-class StreamPETRHead(BaseModule):
+@HEADS.register_module()
+class StreamPETRHead(AnchorFreeHead):
     """Implements the DETR transformer head.
     See `paper: End-to-End Object Detection with Transformers
     <https://arxiv.org/pdf/2005.12872>`_ for details.
@@ -55,10 +57,6 @@ class StreamPETRHead(BaseModule):
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None
     """
-
-    def loss_by_feat(self, *args, **kwargs):
-        """Compatibility entry point required by MMDetection 3.x heads."""
-        return self.loss(*args, **kwargs)
     _version = 2
 
     def __init__(self,
@@ -154,10 +152,10 @@ class StreamPETRHead(BaseModule):
             assigner = train_cfg['assigner']
 
 
-            self.assigner = TASK_UTILS.build(assigner)
+            self.assigner = build_assigner(assigner)
             # DETR sampling=False, so use PseudoSampler
             sampler_cfg = dict(type='PseudoSampler')
-            self.sampler = PseudoSampler()
+            self.sampler = build_sampler(sampler_cfg, context=self)
 
         self.num_query = num_query
         self.num_classes = num_classes
@@ -190,18 +188,18 @@ class StreamPETRHead(BaseModule):
                                        dict(type='ReLU', inplace=True))
         self.num_pred = 6
         self.normedlinear = normedlinear
-        super(StreamPETRHead, self).__init__(init_cfg=init_cfg)
+        super(StreamPETRHead, self).__init__(num_classes, in_channels, init_cfg = init_cfg)
 
-        self.loss_cls = MMDET_MODELS.build(dict(loss_cls, _scope_='mmdet'))
-        self.loss_bbox = MMDET_MODELS.build(dict(loss_bbox, _scope_='mmdet'))
-        self.loss_iou = MMDET_MODELS.build(dict(loss_iou, _scope_='mmdet'))
+        self.loss_cls = build_loss(loss_cls)
+        self.loss_bbox = build_loss(loss_bbox)
+        self.loss_iou = build_loss(loss_iou)
 
         if self.loss_cls.use_sigmoid:
             self.cls_out_channels = num_classes
         else:
             self.cls_out_channels = num_classes + 1
 
-        self.transformer = MODELS.build(transformer)
+        self.transformer = build_transformer(transformer)
 
         self.code_weights = nn.Parameter(torch.tensor(
             self.code_weights), requires_grad=False)
@@ -209,7 +207,7 @@ class StreamPETRHead(BaseModule):
         self.match_costs = nn.Parameter(torch.tensor(
             self.match_costs), requires_grad=False)
 
-        self.bbox_coder = TASK_UTILS.build(bbox_coder)
+        self.bbox_coder = build_bbox_coder(bbox_coder)
 
         self.pc_range = nn.Parameter(torch.tensor(
             self.bbox_coder.pc_range), requires_grad=False)
@@ -322,8 +320,7 @@ class StreamPETRHead(BaseModule):
         x = data['prev_exists']
         B = x.size(0)
         # refresh the memory when the scene changes
-        if (self.memory_embedding is None
-                or self.memory_embedding.size(0) != B):
+        if self.memory_embedding is None:
             self.memory_embedding = x.new_zeros(B, self.memory_len, self.embed_dims)
             self.memory_reference_point = x.new_zeros(B, self.memory_len, 3)
             self.memory_timestamp = x.new_zeros(B, self.memory_len, 1)
@@ -453,15 +450,9 @@ class StreamPETRHead(BaseModule):
 
     def prepare_for_dn(self, batch_size, reference_points, img_metas):
         if self.training and self.with_dn:
-            boxes = [img_meta['gt_bboxes_3d'] for img_meta in img_metas]
-            boxes = [getattr(box, '_data', box) for box in boxes]
-            targets = [torch.cat((box.gravity_center, box.tensor[:, 3:]),
-                                 dim=1) for box in boxes]
-            labels = [getattr(img_meta['gt_labels_3d'], '_data',
-                              img_meta['gt_labels_3d'])
-                      for img_meta in img_metas]
-            # Keep DN masks on the labels' device (CUDA/NPU/CPU).
-            known = [torch.ones_like(t) for t in labels]
+            targets = [torch.cat((img_meta['gt_bboxes_3d']._data.gravity_center, img_meta['gt_bboxes_3d']._data.tensor[:, 3:]),dim=1) for img_meta in img_metas ]
+            labels = [img_meta['gt_labels_3d']._data for img_meta in img_metas ]
+            known = [(torch.ones_like(t)).cuda() for t in labels]
             know_idx = known
             unmask_bbox = unmask_label = torch.cat(known)
             #gt_num
@@ -566,9 +557,10 @@ class StreamPETRHead(BaseModule):
                         state_dict[convert_key] = state_dict[k]
                         del state_dict[k]
 
-        super()._load_from_state_dict(state_dict, prefix, local_metadata,
-                                      strict, missing_keys, unexpected_keys,
-                                      error_msgs)
+        super(AnchorFreeHead,
+              self)._load_from_state_dict(state_dict, prefix, local_metadata,
+                                          strict, missing_keys,
+                                          unexpected_keys, error_msgs)
     
 
     def forward(self, memory_center, img_metas, topk_indexes=None,  **data):
@@ -711,10 +703,8 @@ class StreamPETRHead(BaseModule):
 
         assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
                                                 gt_labels, gt_bboxes_ignore, self.match_costs, self.match_with_velo)
-        sampling_result = self.sampler.sample(
-            assign_result,
-            InstanceData(priors=bbox_pred),
-            InstanceData(bboxes=gt_bboxes, labels=gt_labels))
+        sampling_result = self.sampler.sample(assign_result, bbox_pred,
+                                              gt_bboxes)
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
 
@@ -915,6 +905,7 @@ class StreamPETRHead(BaseModule):
         
         return self.dn_weight * loss_cls, self.dn_weight * loss_bbox
     
+    @force_fp32(apply_to=('preds_dicts'))
     def loss(self,
              gt_bboxes_list,
              gt_labels_list,
@@ -949,10 +940,6 @@ class StreamPETRHead(BaseModule):
         assert gt_bboxes_ignore is None, \
             f'{self.__class__.__name__} only supports ' \
             f'for gt_bboxes_ignore setting to None.'
-        preds_dicts = {
-            key: value.float() if torch.is_tensor(value) else value
-            for key, value in preds_dicts.items()
-        }
 
         all_cls_scores = preds_dicts['all_cls_scores']
         all_bbox_preds = preds_dicts['all_bbox_preds']
@@ -1027,6 +1014,7 @@ class StreamPETRHead(BaseModule):
         return loss_dict
 
 
+    @force_fp32(apply_to=('preds_dicts'))
     def get_bboxes(self, preds_dicts, img_metas, rescale=False):
         """Generate bboxes from bbox head predictions.
         Args:

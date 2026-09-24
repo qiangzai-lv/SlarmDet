@@ -12,12 +12,12 @@
 
 import numpy as np
 import mmcv
-from mmdet3d.registry import TRANSFORMS
+from mmdet.datasets.builder import PIPELINES
 import torch
 from PIL import Image
 
 
-@TRANSFORMS.register_module()
+@PIPELINES.register_module()
 class PadMultiViewImage():
     """Pad the multi-view image.
     There are two padding modes: (1) pad to a fixed size and (2) pad to the
@@ -68,7 +68,7 @@ class PadMultiViewImage():
         return repr_str
 
 
-@TRANSFORMS.register_module()
+@PIPELINES.register_module()
 class NormalizeMultiviewImage(object):
     """Normalize the image.
     Added key is "img_norm_cfg".
@@ -104,7 +104,7 @@ class NormalizeMultiviewImage(object):
         return repr_str
 
 
-@TRANSFORMS.register_module()
+@PIPELINES.register_module()
 class ResizeCropFlipRotImage():
     def __init__(self, data_aug_conf=None, with_2d=True, filter_invisible=True, training=True):
         self.data_aug_conf = data_aug_conf
@@ -114,13 +114,6 @@ class ResizeCropFlipRotImage():
         self.filter_invisible = filter_invisible
 
     def __call__(self, results):
-
-        # MMDetection 3.x annotation loaders use these canonical names.
-        # Keep the historical names for StreamPETR's auxiliary 2D branch.
-        if 'gt_bboxes_labels' in results:
-            results['gt_labels'] = results['gt_bboxes_labels']
-        if 'centers_2d' in results:
-            results['centers2d'] = results['centers_2d']
 
         imgs = results['img']
         N = len(imgs)
@@ -172,8 +165,6 @@ class ResizeCropFlipRotImage():
         results['gt_bboxes'] = new_gt_bboxes
         results['centers2d'] = new_centers2d
         results['gt_labels'] = new_gt_labels
-        results['centers_2d'] = new_centers2d
-        results['gt_bboxes_labels'] = new_gt_labels
         results['depths'] = new_depths
         results['img'] = new_imgs
         results['lidar2img'] = [results['intrinsics'][i] @ results['extrinsics'][i] for i in range(len(results['extrinsics']))]
@@ -306,7 +297,7 @@ class ResizeCropFlipRotImage():
             rotate = 0
         return resize, resize_dims, crop, flip, rotate
 
-@TRANSFORMS.register_module()
+@PIPELINES.register_module()
 class GlobalRotScaleTransImage():
     def __init__(
         self,

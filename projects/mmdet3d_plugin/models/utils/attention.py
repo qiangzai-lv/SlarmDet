@@ -15,15 +15,11 @@ from torch.nn.init import (
 from torch.nn.functional import linear
 
 from einops import rearrange
+from mmcv.runner import auto_fp16
+from mmcv.runner.base_module import BaseModule
 
-try:
-    from flash_attn.flash_attn_interface import flash_attn_unpadded_kvpacked_func
-    from flash_attn.bert_padding import unpad_input
-    _FLASH_ATTN_AVAILABLE = True
-except ImportError:
-    flash_attn_unpadded_kvpacked_func = None
-    unpad_input = None
-    _FLASH_ATTN_AVAILABLE = False
+from flash_attn.flash_attn_interface import flash_attn_unpadded_kvpacked_func
+from flash_attn.bert_padding import unpad_input, pad_input, index_first_axis
 
 
 def _in_projection_packed(q, k, v, w, b = None):
@@ -51,6 +47,7 @@ class FlashAttention(nn.Module):
         self.dropout_p = attention_dropout
         self.fp16_enabled = True
 
+    @auto_fp16(apply_to=('q', 'kv'), out_fp32=True)
     def forward(self, q, kv, 
                 causal=False, 
                 key_padding_mask=None):
@@ -61,27 +58,6 @@ class FlashAttention(nn.Module):
             kv: The tensor containing the key, and value. (B, S, 2, H, D) 
             key_padding_mask: a bool tensor of shape (B, S)
         """
-        # flash-attn is a CUDA extension.  Even when it is importable, route
-        # non-CUDA tensors through the device-neutral PyTorch implementation.
-        if not _FLASH_ATTN_AVAILABLE or q.device.type != 'cuda':
-            # Keep imports and CPU smoke tests usable without the optional CUDA
-            # extension. Production CUDA environments use the branch below.
-            k, v = kv.unbind(dim=2)
-            # The original MMCV ``auto_fp16(out_fp32=True)`` decorator
-            # performed attention in the configured AMP dtype but restored an
-            # FP32 output. Match that contract for the torch fallback; keeping
-            # the softmax in FP16 can overflow and poison decoder gradients.
-            q_ = q.float().transpose(1, 2)
-            k_ = k.float().transpose(1, 2)
-            v_ = v.float().transpose(1, 2)
-            output = torch.nn.functional.scaled_dot_product_attention(
-                q_, k_, v_, dropout_p=self.dropout_p if self.training else 0.0)
-            return output.transpose(1, 2).float(), None
-
-        if q.dtype == torch.float32:
-            q = q.half()
-        if kv.dtype == torch.float32:
-            kv = kv.half()
         assert q.dtype in [torch.float16, torch.bfloat16] and kv.dtype in [torch.float16, torch.bfloat16]
         assert q.is_cuda and kv.is_cuda
         assert q.shape[0] == kv.shape[0] and q.shape[-2] == kv.shape[-2] and q.shape[-1] == kv.shape[-1]
@@ -117,7 +93,7 @@ class FlashAttention(nn.Module):
             )
             output = rearrange(output_unpad, '(b s) ... -> b s ...', b=batch_size)
 
-        return output.float(), None
+        return output, None
 
 
 class FlashMHA(nn.Module):

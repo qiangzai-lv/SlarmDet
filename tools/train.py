@@ -12,38 +12,6 @@ from mmengine.runner import Runner
 from mmdet3d.utils import replace_ceph_backend
 
 
-def _set_npu_device(local_rank):
-    """Select the NPU for this worker with actionable device diagnostics."""
-    import torch
-
-    # Cloud NPU jobs sometimes provide one explicit physical device instead
-    # of a visible-device list.  Honour it for single-process launches; for
-    # HCCL jobs each worker must use its logical LOCAL_RANK.
-    world_size = int(os.environ.get('WORLD_SIZE', '1'))
-    explicit_id = (os.environ.get('ASCEND_DEVICE_ID') or
-                   os.environ.get('NPU_DEVICE_ID'))
-    device_id = (int(explicit_id) if explicit_id is not None and
-                 world_size == 1 else local_rank)
-
-    visible = (os.environ.get('ASCEND_RT_VISIBLE_DEVICES') or
-               os.environ.get('ASCEND_VISIBLE_DEVICES') or
-               os.environ.get('NPU_VISIBLE_DEVICES') or '<all>')
-    try:
-        available = torch.npu.device_count()
-    except Exception as exc:
-        raise RuntimeError(
-            'Unable to query Ascend devices. Check CANN/torch_npu and the '
-            f'visible-device environment (visible={visible!r}).') from exc
-    if available <= device_id:
-        raise RuntimeError(
-            f'Invalid NPU device for LOCAL_RANK={local_rank}: requested '
-            f'device {device_id}, torch_npu reports {available} device(s), '
-            f'visible={visible!r}, WORLD_SIZE={world_size}. '
-            'Reduce --nproc_per_node to the allocated NPU count or fix the '
-            'Ascend visible-device environment.')
-    torch.npu.set_device(device_id)
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a 3D detector')
     parser.add_argument('config', help='train config file path')
@@ -103,20 +71,6 @@ def main():
 
     # load config
     cfg = Config.fromfile(args.config)
-
-    # torch_npu registers the ``npu`` device and HCCL backend with PyTorch.
-    # Import it before Runner construction so MMEngine can create the model
-    # and distributed process group on Ascend.  The import is conditional to
-    # keep the CUDA/CPU training entry point unchanged.
-    if cfg.get('device', None) == 'npu':
-        try:
-            import torch_npu  # noqa: F401
-        except ImportError as exc:
-            raise RuntimeError(
-                'This configuration requires torch_npu; install the '
-                'torch_npu/CANN stack on the Ascend host.') from exc
-        local_rank = int(os.environ.get('LOCAL_RANK', args.local_rank))
-        _set_npu_device(local_rank)
 
     # TODO: We will unify the ceph support approach with other OpenMMLab repos
     if args.ceph:

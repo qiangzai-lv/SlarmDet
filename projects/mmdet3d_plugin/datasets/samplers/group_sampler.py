@@ -11,14 +11,14 @@ import copy
 import torch.distributed as dist
 import numpy as np
 import torch
-from mmengine.dist import get_dist_info
+from mmcv.runner import get_dist_info
 from torch.utils.data import Sampler
-from mmdet3d.registry import DATA_SAMPLERS
+from .sampler import SAMPLER
 import random
 from IPython import embed
 
 
-@DATA_SAMPLERS.register_module()
+@SAMPLER.register_module()
 class DistributedGroupSampler(Sampler):
     """Sampler that restricts data loading to a subset of the dataset.
     It is especially useful in conjunction with
@@ -116,7 +116,7 @@ class DistributedGroupSampler(Sampler):
         self.epoch = epoch
 
 
-def sync_random_seed(seed=None, device=None):
+def sync_random_seed(seed=None, device='cuda'):
     """Make sure different ranks share the same seed.
     All workers must call this function, otherwise it will deadlock.
     This method is generally used in `DistributedSampler`,
@@ -129,20 +129,11 @@ def sync_random_seed(seed=None, device=None):
     to select non-overlapped data from the same data list.
     Args:
         seed (int, Optional): The seed. Default to None.
-        device (str): The device where the seed will be put on.  If omitted,
-            choose the active accelerator so HCCL/NCCL broadcasts use the
-            correct backend.
+        device (str): The device where the seed will be put on.
+            Default to 'cuda'.
     Returns:
         int: Seed to be used.
     """
-    if device is None:
-        if hasattr(torch, 'npu') and torch.npu.is_available():
-            device = 'npu'
-        elif torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
-
     if seed is None:
         seed = np.random.randint(2**31)
     assert isinstance(seed, int)
@@ -159,7 +150,7 @@ def sync_random_seed(seed=None, device=None):
     dist.broadcast(random_num, src=0)
     return random_num.item()
 
-@DATA_SAMPLERS.register_module()
+@SAMPLER.register_module()
 class InfiniteGroupEachSampleInBatchSampler(Sampler):
     """
     Pardon this horrendous name. Basically, we want every sample to be from its own group.
@@ -169,10 +160,8 @@ class InfiniteGroupEachSampleInBatchSampler(Sampler):
     """
 
     def __init__(self, 
-                 dataset=None,
+                 dataset,
                  samples_per_gpu=1,
-                 batch_size=None,
-                 sampler=None,
                  num_replicas=None,
                  rank=None,
                  seed=0):
@@ -183,9 +172,8 @@ class InfiniteGroupEachSampleInBatchSampler(Sampler):
         if rank is None:
             rank = _rank
 
-        self.dataset = dataset if dataset is not None else sampler.dataset
-        self.sampler = sampler
-        self.batch_size = batch_size or samples_per_gpu
+        self.dataset = dataset
+        self.batch_size = samples_per_gpu
         self.num_replicas = num_replicas
         self.rank = rank
         self.seed = sync_random_seed(seed)

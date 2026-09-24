@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from mmdet.structures.bbox import bbox_xyxy_to_cxcywh
-from mmdet.models.layers import inverse_sigmoid
+from mmdet.core import bbox_xyxy_to_cxcywh
+from mmdet.models.utils.transformer import inverse_sigmoid
 
 def memory_refresh(memory, prev_exist):
     memory_shape = memory.shape

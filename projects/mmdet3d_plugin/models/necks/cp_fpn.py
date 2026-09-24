@@ -7,12 +7,12 @@
 import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import ConvModule
-from mmengine.model import BaseModule
+from mmcv.runner import BaseModule, auto_fp16
 
-from mmdet3d.registry import MODELS
+from mmdet.models import NECKS
 
 ####This FPN remove the unused parameters which can used with checkpoint (with_cp = True in Backbone)
-@MODELS.register_module()
+@NECKS.register_module()
 class CPFPN(BaseModule):
     r"""Feature Pyramid Network.
 
@@ -153,6 +153,7 @@ class CPFPN(BaseModule):
                     inplace=False)
                 self.fpn_convs.append(extra_fpn_conv)
 
+    @auto_fp16(out_fp32=True)
     def forward(self, inputs):
         """Forward function."""
         assert len(inputs) == len(self.in_channels)

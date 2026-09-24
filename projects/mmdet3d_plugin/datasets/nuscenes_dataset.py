@@ -10,19 +10,15 @@
 #  Modified by Shihao Wang
 # ------------------------------------------------------------------------
 import numpy as np
-from mmdet3d.registry import DATASETS
+from mmdet.datasets import DATASETS
 from mmdet3d.datasets import NuScenesDataset
+from mmdet.datasets import DATASETS
 import torch
 import numpy as np
 from nuscenes.eval.common.utils import Quaternion
-try:
-    from mmcv.parallel import DataContainer as DC
-except ImportError:  # Legacy path; the v2 packer does not use it.
-    DC = None
+from mmcv.parallel import DataContainer as DC
 import random
 import math
-from mmengine.fileio import load
-from mmdet3d.structures import LiDARInstance3DBoxes
 @DATASETS.register_module()
 class CustomNuScenesDataset(NuScenesDataset):
     r"""NuScenes Dataset.
@@ -31,12 +27,7 @@ class CustomNuScenesDataset(NuScenesDataset):
     """
 
     def __init__(self, collect_keys, seq_mode=False, seq_split_num=1, num_frame_losses=1, queue_length=8, random_length=0, *args, **kwargs):
-        classes = kwargs.pop('classes', None)
-        if classes is not None and 'metainfo' not in kwargs:
-            kwargs['metainfo'] = dict(classes=tuple(classes))
-        kwargs.setdefault('serialize_data', False)
         super().__init__(*args, **kwargs)
-        self.data_infos = self.data_list
         self.queue_length = queue_length
         self.collect_keys = collect_keys
         self.random_length = random_length
@@ -87,54 +78,6 @@ class CustomNuScenesDataset(NuScenesDataset):
                 assert len(np.bincount(new_flags)) == len(np.bincount(self.flag)) * self.seq_split_num
                 self.flag = np.array(new_flags, dtype=np.int64)
 
-    def load_data_list(self):
-        """Load legacy StreamPETR info files without rewriting annotations."""
-        annotations = load(self.ann_file, backend_args=self.backend_args)
-        if isinstance(annotations, dict) and 'infos' in annotations:
-            self._metainfo.update(annotations.get('metadata', {}))
-            infos = annotations['infos']
-            # Legacy StreamPETR infos bypass Det3DDataset.parse_ann_info,
-            # which normally updates ``num_ins_per_cat`` during parsing.
-            class_to_id = {
-                name: idx
-                for idx, name in enumerate(self.metainfo['classes'])
-            }
-            for info in infos:
-                names = np.asarray(info.get('gt_names', []))
-                if 'valid_flag' in info:
-                    mask = np.asarray(info['valid_flag'], dtype=bool)
-                else:
-                    mask = np.asarray(info.get('num_lidar_pts',
-                                                np.ones(len(names)))) > 0
-                for name in names[mask]:
-                    label = class_to_id.get(name)
-                    if label is not None:
-                        self.num_ins_per_cat[label] += 1
-            return infos
-        return super().load_data_list()
-
-    def get_ann_info(self, index):
-        info = self.data_infos[index]
-        mask = (info['valid_flag'] if self.use_valid_flag else
-                info['num_lidar_pts'] > 0)
-        gt_boxes = info['gt_boxes'][mask]
-        gt_names = info['gt_names'][mask]
-        gt_labels = np.array([
-            self.metainfo['classes'].index(name)
-            if name in self.metainfo['classes'] else -1 for name in gt_names
-        ], dtype=np.int64)
-        if self.with_velocity:
-            velocity = info['gt_velocity'][mask].copy()
-            velocity[np.isnan(velocity[:, 0])] = 0
-            gt_boxes = np.concatenate([gt_boxes, velocity], axis=-1)
-        gt_boxes = LiDARInstance3DBoxes(
-            gt_boxes, box_dim=gt_boxes.shape[-1],
-            origin=(0.5, 0.5, 0.5)).convert_to(self.box_mode_3d)
-        return dict(
-            gt_bboxes_3d=gt_boxes,
-            gt_labels_3d=gt_labels,
-            gt_names_3d=gt_names)
-
 
     def prepare_train_data(self, index):
         """
@@ -161,6 +104,7 @@ class CustomNuScenesDataset(NuScenesDataset):
                 else:
                     input_dict.update(dict(prev_exists=True))
 
+            self.pre_pipeline(input_dict)
             example = self.pipeline(input_dict)
 
             queue.append(example)
@@ -181,15 +125,11 @@ class CustomNuScenesDataset(NuScenesDataset):
             dict: Testing data dict of the corresponding index.
         """
         input_dict = self.get_data_info(index)
+        self.pre_pipeline(input_dict)
         example = self.pipeline(input_dict)
         return example
         
     def union2one(self, queue):
-        # The sequence configuration uses one frame per sample and preserves
-        # temporal state in StreamPETR's memory bank. Pack3DDetInputs already
-        # returns the MMEngine-native inputs/data_samples structure.
-        if len(queue) == 1:
-            return queue[0]
         for key in self.collect_keys:
             if key != 'img_metas':
                 queue[-1][key] = DC(torch.stack([each[key].data for each in queue]), cpu_only=False, stack=True, pad_dims=None)
@@ -237,9 +177,7 @@ class CustomNuScenesDataset(NuScenesDataset):
 
         ego_pose_inv = invert_matrix_egopose_numpy(ego_pose)
         input_dict = dict(
-            sample_idx=index,
-            box_type_3d=self.box_type_3d,
-            box_mode_3d=self.box_mode_3d,
+            sample_idx=info['token'],
             pts_filename=info['lidar_path'],
             sweeps=info['sweeps'],
             ego_pose=ego_pose,
@@ -257,7 +195,6 @@ class CustomNuScenesDataset(NuScenesDataset):
             intrinsics = []
             extrinsics = []
             img_timestamp = []
-            images = {}
             for cam_type, cam_info in info['cams'].items():
                 img_timestamp.append(cam_info['timestamp'] / 1e6)
                 image_paths.append(cam_info['data_path'])
@@ -274,10 +211,6 @@ class CustomNuScenesDataset(NuScenesDataset):
                 intrinsics.append(viewpad)
                 extrinsics.append(lidar2cam_rt)
                 lidar2img_rts.append(lidar2img_rt)
-                images[cam_type] = dict(
-                    img_path=cam_info['data_path'],
-                    cam2img=intrinsic,
-                    lidar2cam=lidar2cam_rt)
                 
             if not self.test_mode: # for seq_mode
                 prev_exists  = not (index == 0 or self.flag[index - 1] != self.flag[index])
@@ -288,7 +221,6 @@ class CustomNuScenesDataset(NuScenesDataset):
                 dict(
                     img_timestamp=img_timestamp,
                     img_filename=image_paths,
-                    images=images,
                     lidar2img=lidar2img_rts,
                     intrinsics=intrinsics,
                     extrinsics=extrinsics,
@@ -298,11 +230,11 @@ class CustomNuScenesDataset(NuScenesDataset):
             annos = self.get_ann_info(index)
             annos.update( 
                 dict(
-                    gt_bboxes=info['bboxes2d'],
-                    gt_bboxes_labels=info['labels2d'],
-                    centers_2d=info['centers2d'],
+                    bboxes=info['bboxes2d'],
+                    labels=info['labels2d'],
+                    centers2d=info['centers2d'],
                     depths=info['depths'],
-                    gt_bboxes_ignore=info['bboxes_ignore'])
+                    bboxes_ignore=info['bboxes_ignore'])
             )
             input_dict['ann_info'] = annos
             

@@ -18,18 +18,20 @@ from mmcv.cnn.bricks.transformer import (BaseTransformerLayer,
                                          build_attention,
                                          build_feedforward_network)
 from mmcv.cnn.bricks.drop import build_dropout
-from mmengine.registry import MODELS
-from mmcv.cnn import build_norm_layer
-from mmengine.model import BaseModule, xavier_init
-from mmengine.config import ConfigDict
-from mmengine.utils import deprecated_api_warning
+from mmdet.models.utils.builder import TRANSFORMER
+from mmcv.cnn import build_norm_layer, xavier_init
+from mmcv.runner.base_module import BaseModule
+from mmcv.cnn.bricks.registry import (ATTENTION,TRANSFORMER_LAYER,
+                                      TRANSFORMER_LAYER_SEQUENCE)
+from mmcv.utils import deprecated_api_warning, ConfigDict
 import copy
 from torch.nn import ModuleList
 from .attention import FlashMHA
 import torch.utils.checkpoint as cp
 
+from mmcv.runner import auto_fp16
 
-@MODELS.register_module()
+@ATTENTION.register_module()
 class PETRMultiheadFlashAttention(BaseModule):
     """A wrapper for ``torch.nn.MultiheadAttention``.
     This module implements MultiheadAttention with identity connection,
@@ -73,10 +75,8 @@ class PETRMultiheadFlashAttention(BaseModule):
         self.num_heads = num_heads
         self.batch_first = True
 
-        # Do not bind the module to CUDA during construction.  Parameters are
-        # moved by the runner to the selected device, including Ascend NPU.
-        self.attn = FlashMHA(embed_dims, num_heads, attn_drop,
-                             dtype=torch.float16, device=None, **kwargs)
+        self.attn = FlashMHA(embed_dims, num_heads, attn_drop, dtype=torch.float16, device='cuda',
+                                          **kwargs)
 
         self.proj_drop = nn.Dropout(proj_drop)
         self.dropout_layer = build_dropout(
@@ -178,6 +178,7 @@ class MultiheadAttentionWrapper(nn.MultiheadAttention):
         super(MultiheadAttentionWrapper, self).__init__(*args, **kwargs)
         self.fp16_enabled = True
 
+    @auto_fp16(out_fp32=True)
     def forward_fp16(self, *args, **kwargs):
         return super(MultiheadAttentionWrapper, self).forward(*args, **kwargs)
 
@@ -190,7 +191,7 @@ class MultiheadAttentionWrapper(nn.MultiheadAttention):
         else:
             return self.forward_fp32( *args, **kwargs)
 
-@MODELS.register_module()
+@ATTENTION.register_module()
 class PETRMultiheadAttention(BaseModule):
     """A wrapper for ``torch.nn.MultiheadAttention``.
     This module implements MultiheadAttention with identity connection,
@@ -337,7 +338,7 @@ class PETRMultiheadAttention(BaseModule):
 
 
 
-@MODELS.register_module()
+@TRANSFORMER_LAYER_SEQUENCE.register_module()
 class PETRTransformerEncoder(TransformerLayerSequence):
     """TransformerEncoder of DETR.
     Args:
@@ -367,7 +368,7 @@ class PETRTransformerEncoder(TransformerLayerSequence):
         return x
 
 
-@MODELS.register_module()
+@TRANSFORMER_LAYER_SEQUENCE.register_module()
 class PETRTransformerDecoder(TransformerLayerSequence):
     """Implements the decoder in DETR transformer.
     Args:
@@ -418,7 +419,7 @@ class PETRTransformerDecoder(TransformerLayerSequence):
 
 
 
-@MODELS.register_module()
+@TRANSFORMER.register_module()
 class PETRTemporalTransformer(BaseModule):
     """Implements the DETR transformer.
     Following the official DETR implementation, this module copy-paste
@@ -508,7 +509,7 @@ class PETRTemporalTransformer(BaseModule):
         return  out_dec, memory
 
 
-@MODELS.register_module()
+@TRANSFORMER_LAYER.register_module()
 class PETRTemporalDecoderLayer(BaseModule):
     """Base `TransformerLayer` for vision transformer.
 
@@ -794,3 +795,4 @@ class PETRTemporalDecoderLayer(BaseModule):
             key_padding_mask,
         )
         return x
+

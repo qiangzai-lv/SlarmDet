@@ -20,18 +20,6 @@ from mmdet3d.structures import (CameraInstance3DBoxes, LiDARInstance3DBoxes,
                                 bbox3d2result, xywhr2xyxyr)
 
 
-def _get_data_infos(annotations: dict) -> list:
-    """Return sample infos from current or legacy StreamPETR annotations."""
-    if 'data_list' in annotations:
-        return annotations['data_list']
-    if 'infos' in annotations:
-        return annotations['infos']
-    raise KeyError(
-        'Unsupported NuScenes annotation format: expected one of '
-        "'data_list' or 'infos', got keys "
-        f'{list(annotations.keys())}')
-
-
 @METRICS.register_module()
 class NuScenesMetric(BaseMetric):
     """Nuscenes evaluation metric.
@@ -173,8 +161,8 @@ class NuScenesMetric(BaseMetric):
         classes = self.dataset_meta['classes']
         self.version = self.dataset_meta['version']
         # load annotations
-        annotations = load(self.ann_file, backend_args=self.backend_args)
-        self.data_infos = _get_data_infos(annotations)
+        self.data_infos = load(
+            self.ann_file, backend_args=self.backend_args)['data_list']
         result_dict, tmp_dir = self.format_results(results, classes,
                                                    self.jsonfile_prefix)
 
@@ -661,17 +649,10 @@ def lidar_nusc_box_to_global(
     box_list = []
     for box in boxes:
         # Move box to ego vehicle coord system
-        if 'lidar_points' in info:
-            lidar2ego = np.array(info['lidar_points']['lidar2ego'])
-            lidar2ego_rotation = pyquaternion.Quaternion(
-                matrix=lidar2ego, rtol=1e-05, atol=1e-07)
-            lidar2ego_translation = lidar2ego[:3, 3]
-        else:
-            lidar2ego_rotation = pyquaternion.Quaternion(
-                info['lidar2ego_rotation'])
-            lidar2ego_translation = info['lidar2ego_translation']
-        box.rotate(lidar2ego_rotation)
-        box.translate(lidar2ego_translation)
+        lidar2ego = np.array(info['lidar_points']['lidar2ego'])
+        box.rotate(
+            pyquaternion.Quaternion(matrix=lidar2ego, rtol=1e-05, atol=1e-07))
+        box.translate(lidar2ego[:3, 3])
         # filter det in ego.
         cls_range_map = eval_configs.class_range
         radius = np.linalg.norm(box.center[:2], 2)
@@ -679,17 +660,10 @@ def lidar_nusc_box_to_global(
         if radius > det_range:
             continue
         # Move box to global coord system
-        if 'ego2global' in info:
-            ego2global = np.array(info['ego2global'])
-            ego2global_rotation = pyquaternion.Quaternion(
-                matrix=ego2global, rtol=1e-05, atol=1e-07)
-            ego2global_translation = ego2global[:3, 3]
-        else:
-            ego2global_rotation = pyquaternion.Quaternion(
-                info['ego2global_rotation'])
-            ego2global_translation = info['ego2global_translation']
-        box.rotate(ego2global_rotation)
-        box.translate(ego2global_translation)
+        ego2global = np.array(info['ego2global'])
+        box.rotate(
+            pyquaternion.Quaternion(matrix=ego2global, rtol=1e-05, atol=1e-07))
+        box.translate(ego2global[:3, 3])
         box_list.append(box)
     return box_list
 
