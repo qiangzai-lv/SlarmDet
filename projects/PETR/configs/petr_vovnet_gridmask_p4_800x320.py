@@ -20,7 +20,7 @@ class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
     'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
 ]
-metainfo = dict(classes=class_names, version='v1.0-mini')
+metainfo = dict(classes=class_names)
 
 input_modality = dict(use_camera=True)
 model = dict(
@@ -120,7 +120,7 @@ backend_args = None
 
 db_sampler = dict(
     data_root=data_root,
-    info_path=data_root + 'v1.0-mini_dbinfos_train.pkl',
+    info_path=data_root + 'nuscenes_dbinfos_train.pkl',
     rate=1.0,
     prepare=dict(
         filter_by_difficulty=[-1],
@@ -296,7 +296,7 @@ find_unused_parameters = False
 
 # pretrain_path can be found here:
 # https://drive.google.com/file/d/1ABI5BoQCkCkP4B0pO5KBJ3Ni0tei0gZi/view
-load_from = '/root/shared-nvme/code/SlarmDet/ckpts/fcos3d_vovnet_imgbackbone-remapped.pth'
+load_from = '/mnt/d/fcos3d_vovnet_imgbackbone-remapped.pth'
 resume = False
 
 # --------------Original---------------
