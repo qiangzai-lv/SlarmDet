@@ -275,7 +275,7 @@ parser.add_argument(
 parser.add_argument(
     '--version',
     type=str,
-    default='v1.0',
+    default='v1.0-mini',
     required=False,
     help='specify the dataset version, no need for kitti')
 parser.add_argument(
@@ -336,6 +336,7 @@ if __name__ == '__main__':
                 out_dir=args.out_dir,
                 with_plane=args.with_plane)
     elif args.dataset == 'nuscenes' and args.version != 'v1.0-mini':
+        print_log(args.version)
         if args.only_gt_database:
             create_groundtruth_database('NuScenesDataset', args.root_path,
                                         args.extra_tag,
