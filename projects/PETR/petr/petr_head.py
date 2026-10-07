@@ -374,7 +374,10 @@ class PETRHead(AnchorFreeHead):
         coords = coords.view(1, 1, W, H, D, 4, 1).repeat(B, N, 1, 1, 1, 1, 1)
         img2lidars = img2lidars.view(B, N, 1, 1, 1, 4,
                                      4).repeat(1, 1, W, H, D, 1, 1)
-        coords3d = torch.matmul(img2lidars, coords).squeeze(-1)[..., :3]
+        matmul_shape = coords.shape[:-2]
+        coords3d = torch.bmm(
+            img2lidars.reshape(-1, 4, 4),
+            coords.reshape(-1, 4, 1)).view(*matmul_shape, 4)[..., :3]
         coords3d[..., 0:1] = (coords3d[..., 0:1] - self.position_range[0]) / (
             self.position_range[3] - self.position_range[0])
         coords3d[..., 1:2] = (coords3d[..., 1:2] - self.position_range[1]) / (

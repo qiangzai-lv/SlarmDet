@@ -290,7 +290,16 @@ param_scheduler = [
     )
 ]
 
-train_cfg = dict(max_epochs=num_epochs, val_interval=1)
+train_cfg = dict(
+    max_epochs=num_epochs,
+    val_begin=num_epochs + 1,
+    val_interval=num_epochs + 1)
+
+default_hooks = dict(
+    checkpoint=dict(type='CheckpointHook', interval=1))
+
+val_evaluator = dict(format_num_workers=8)
+test_evaluator = dict(format_num_workers=8)
 
 find_unused_parameters = False
 

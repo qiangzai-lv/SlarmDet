@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import multiprocessing as mp
 import tempfile
 from os import path as osp
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -48,6 +49,8 @@ class NuScenesMetric(BaseMetric):
             'gpu'. Defaults to 'cpu'.
         backend_args (dict, optional): Arguments to instantiate the
             corresponding backend. Defaults to None.
+        format_num_workers (int): Number of CPU workers used to convert LiDAR
+            detections. ``0`` or ``1`` keeps the original serial path.
     """
     NameMapping = {
         'movable_object.barrier': 'barrier',
@@ -96,7 +99,8 @@ class NuScenesMetric(BaseMetric):
                  jsonfile_prefix: Optional[str] = None,
                  eval_version: str = 'detection_cvpr_2019',
                  collect_device: str = 'cpu',
-                 backend_args: Optional[dict] = None) -> None:
+                 backend_args: Optional[dict] = None,
+                 format_num_workers: int = 0) -> None:
         self.default_prefix = 'NuScenes metric'
         super(NuScenesMetric, self).__init__(
             collect_device=collect_device, prefix=prefix)
@@ -116,6 +120,7 @@ class NuScenesMetric(BaseMetric):
 
         self.jsonfile_prefix = jsonfile_prefix
         self.backend_args = backend_args
+        self.format_num_workers = format_num_workers
 
         self.metrics = metric if isinstance(metric, list) else [metric]
 
@@ -501,51 +506,32 @@ class NuScenesMetric(BaseMetric):
         Returns:
             str: Path of the output json file.
         """
-        nusc_annos = {}
+        eval_config = self.eval_detection_configs.serialize()
+        tasks = [(det, {
+            'token': self.data_infos[sample_idx]['token'],
+            'lidar_points': {
+                'lidar2ego': self.data_infos[sample_idx]['lidar_points'][
+                    'lidar2ego']
+            },
+            'ego2global': self.data_infos[sample_idx]['ego2global'],
+        }, classes, eval_config,
+                  self.DefaultAttribute)
+                 for det, sample_idx in zip(results, sample_idx_list)]
+        if self.format_num_workers > 1:
+            context = mp.get_context('spawn')
+            chunksize = max(1, len(tasks) // (self.format_num_workers * 4))
+            with context.Pool(self.format_num_workers) as pool:
+                converted = pool.imap(_format_lidar_bbox_sample, tasks,
+                                      chunksize=chunksize)
+                converted = mmengine.track_iter_progress(
+                    (converted, len(tasks)))
+                converted = list(converted)
+        else:
+            converted = mmengine.track_iter_progress(
+                ((_format_lidar_bbox_sample(task) for task in tasks),
+                 len(tasks)))
 
-        print('Start to convert detection format...')
-        for i, det in enumerate(mmengine.track_iter_progress(results)):
-            annos = []
-            boxes, attrs = output_to_nusc_box(det)
-            sample_idx = sample_idx_list[i]
-            sample_token = self.data_infos[sample_idx]['token']
-            boxes = lidar_nusc_box_to_global(self.data_infos[sample_idx],
-                                             boxes, classes,
-                                             self.eval_detection_configs)
-            for i, box in enumerate(boxes):
-                name = classes[box.label]
-                if np.sqrt(box.velocity[0]**2 + box.velocity[1]**2) > 0.2:
-                    if name in [
-                            'car',
-                            'construction_vehicle',
-                            'bus',
-                            'truck',
-                            'trailer',
-                    ]:
-                        attr = 'vehicle.moving'
-                    elif name in ['bicycle', 'motorcycle']:
-                        attr = 'cycle.with_rider'
-                    else:
-                        attr = self.DefaultAttribute[name]
-                else:
-                    if name in ['pedestrian']:
-                        attr = 'pedestrian.standing'
-                    elif name in ['bus']:
-                        attr = 'vehicle.stopped'
-                    else:
-                        attr = self.DefaultAttribute[name]
-
-                nusc_anno = dict(
-                    sample_token=sample_token,
-                    translation=box.center.tolist(),
-                    size=box.wlh.tolist(),
-                    rotation=box.orientation.elements.tolist(),
-                    velocity=box.velocity[:2].tolist(),
-                    detection_name=name,
-                    detection_score=box.score,
-                    attribute_name=attr)
-                annos.append(nusc_anno)
-            nusc_annos[sample_token] = annos
+        nusc_annos = dict(converted)
         nusc_submissions = {
             'meta': self.modality,
             'results': nusc_annos,
@@ -555,6 +541,49 @@ class NuScenesMetric(BaseMetric):
         print(f'Results writes to {res_path}')
         mmengine.dump(nusc_submissions, res_path)
         return res_path
+
+
+def _format_lidar_bbox_sample(task):
+    from nuscenes.eval.detection.data_classes import DetectionConfig
+
+    det, info, classes, eval_config, default_attribute = task
+    if isinstance(eval_config, dict):
+        eval_config = DetectionConfig.deserialize(eval_config)
+    boxes, _ = output_to_nusc_box(det)
+    sample_token = info['token']
+    boxes = lidar_nusc_box_to_global(info, boxes, classes,
+                                     eval_config)
+    annos = []
+    for box in boxes:
+        name = classes[box.label]
+        if np.sqrt(box.velocity[0]**2 + box.velocity[1]**2) > 0.2:
+            if name in [
+                    'car', 'construction_vehicle', 'bus', 'truck', 'trailer'
+            ]:
+                attr = 'vehicle.moving'
+            elif name in ['bicycle', 'motorcycle']:
+                attr = 'cycle.with_rider'
+            else:
+                attr = default_attribute[name]
+        else:
+            if name in ['pedestrian']:
+                attr = 'pedestrian.standing'
+            elif name in ['bus']:
+                attr = 'vehicle.stopped'
+            else:
+                attr = default_attribute[name]
+
+        annos.append(
+            dict(
+                sample_token=sample_token,
+                translation=box.center.tolist(),
+                size=box.wlh.tolist(),
+                rotation=box.orientation.elements.tolist(),
+                velocity=box.velocity[:2].tolist(),
+                detection_name=name,
+                detection_score=box.score,
+                attribute_name=attr))
+    return sample_token, annos
 
 
 def output_to_nusc_box(
