@@ -1,0 +1,377 @@
+Running on Ascend NPU.
+Running on Ascend NPU.Running on Ascend NPU.Running on Ascend NPU.
+
+
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+Running on Ascend NPU.
+I20260529 17:27:35 SLARM main_slarm.py:284] hostname: ma-job-35ec8475-f606-423d-8d6a-07785c9432f0-vj-0-worker-0
+
+I20260529 17:27:35 SLARM main_slarm.py:285] job dir: /efs-mi-pay-gy1/l00800213/vit_optimize/PerceptualModel
+I20260529 17:27:35 SLARM main_slarm.py:286] Logging to ./work_dirs/slarm/exp_0529_192-256
+I20260529 17:27:35 SLARM main_slarm.py:287] {
+    "add_angular_velocity": false,
+    "add_camera_embed": false,
+    "add_patch_plucker_embed": true,
+    "auto_resume": false,
+    "batch_size": 2,
+    "blr": 0.0008,
+    "camera_loss_coeff": 5.0,
+    "ckpt_dir": "./work_dirs/slarm/exp_0529_192-256/checkpoints",
+    "ckpt_every_n_iters": 10000,
+    "concat_plucker_embed": false,
+    "context_depth_loss_coeff": 0.1,
+    "context_depth_loss_with_conf": false,
+    "context_point_loss_coeff": 0.1,
+    "context_point_loss_with_conf": false,
+    "context_prediction_loss_warmup_steps": 0,
+    "context_rgb_loss_coeff": 0.1,
+    "context_sky_opacity_loss_coeff": 0.01,
+    "data_root": "/efs-large-spatial-model-2/waymo_storm_processed/STORM_data",
+    "dataset": [
+        "waymo"
+    ],
+    "decoder_type": "dummy",
+    "depth": 12,
+    "device": "cuda",
+    "disable_grad_checkpointing": true,
+    "embed_dim": 768,
+    "enable_camera_head": false,
+    "enable_camera_loss": false,
+    "enable_context_depth_loss": false,
+    "enable_context_feat_loss": true,
+    "enable_context_point_loss": false,
+    "enable_context_rgb_loss": false,
+    "enable_context_sky_opacity_loss": false,
+    "enable_depth_head": false,
+    "enable_depth_loss": true,
+    "enable_feat_loss": false,
+    "enable_flow_loss": false,
+    "enable_flow_reg_loss": true,
+    "enable_lifespan": false,
+    "enable_lifespan_reg_loss": false,
+    "enable_perceptual_loss": true,
+    "enable_point_head": false,
+    "enable_pseudo_depth_loss": false,
+    "enable_sky_depth_loss": false,
+    "enable_sky_opacity_loss": true,
+    "enable_tensorboard": true,
+    "enable_wandb": false,
+    "entity": "YOUR_ENTITY",
+    "eval_batch_size": 1,
+    "eval_every_n_iters": 10000,
+    "evaluate": false,
+    "exp_name": "exp_0529_192-256",
+    "feat_loss_coeff": 1.0,
+    "feat_loss_type": "mse",
+    "flow_coeff": 0.1,
+    "flow_loss_start_iter": 10000,
+    "flow_reg_coeff": 0.005,
+    "gaussian_save_path": "output_gs",
+    "grad_clip": 3.0,
+    "gs_dim": 3,
+    "gs_marbles": false,
+    "img_norm_for_online_feat": true,
+    "input_size": [
+        192,
+        256
+    ],
+    "keep_n_ckpts": 30,
+    "lifespan_reg_coeff": 0.005,
+    "load_depth": true,
+    "load_flow": true,
+    "load_from": "ckpts/ckpt_199999.pth",
+    "load_ground": true,
+    "load_pseudo_depth": false,
+    "load_semantic_label": true,
+    "log_dir": "./work_dirs/slarm/exp_0529_192-256",
+    "log_every_n_iters": 50,
+    "lpips_model": "VGG16",
+    "lr": 0.0004,
+    "lr_sched": "constant",
+    "lseg_model_pretrained_path": "ckpts/lseg/lseg_model_pretrained_2.pth",
+    "lseg_model_scratch_path": "ckpts/lseg/lseg_model_scratch.pth",
+    "max_scale": 0.5,
+    "min_lr": 0.0,
+    "mode": "full",
+    "model": "slarm",
+    "num_context_timesteps": 4,
+    "num_iterations": 200000,
+    "num_max_cameras": 3,
+    "num_motion_tokens": 0,
+    "num_target_timesteps": 4,
+    "num_vis_samples": 1,
+    "num_workers": 16,
+    "online_feat": true,
+    "output_dir": "./work_dirs",
+    "overwrite_wandb": false,
+    "patch_embed": "conv",
+    "patch_size": 8,
+    "perceptual_loss_start_iter": 5000,
+    "perceptual_weight": 0.05,
+    "pesudo_3dgs": false,
+    "pred_gs_conf": false,
+    "profiling_name": "profiling",
+    "project": "slarm",
+    "pseudo_depth_coeff": 0.1,
+    "render_context_frame_contribution": false,
+    "render_context_view": false,
+    "rendered_pc_save_path": "output_rendered_pc",
+    "resume_from": null,
+    "rgb_loss_coeff": 1.0,
+    "save_gaussian": false,
+    "save_rendered_pc": false,
+    "seed": 1,
+    "shortcut_rgb": true,
+    "sigmoid_rgb": true,
+    "similarity_probs_threshold": 0.2,
+    "skip_sky_mask": false,
+    "sky_depth": 300.0,
+    "sky_opacity_loss_coeff": 0.1,
+    "start_iteration": 0,
+    "subset_ratio": 1.0,
+    "timespan": 2.0,
+    "total_elapsed_time": 0.0,
+    "use_2dgs": false,
+    "use_affine_token": true,
+    "use_last_token": true,
+    "use_ms3_motion": true,
+    "use_pred_camera_pose": false,
+    "use_pred_depth": false,
+    "use_render_novel_view": false,
+    "use_sky_token": true,
+    "use_time_token": false,
+    "vggt_pretrained_weight_filepath": "",
+    "video_dir": "./work_dirs/slarm/exp_0529_192-256/videos",
+    "vis_every_n_iters": 500,
+    "visualization_only": false,
+    "voxel_size": 0.2,
+    "voxelize": false,
+    "warmup_iters": 5000,
+    "weight_decay": 0.05,
+    "without_feat": false
+}
+I20260529 17:27:50 PerceptualModel datasets.py:175] Loaded 798 annotations.
+I20260529 17:27:54 PerceptualModel datasets.py:175] Loaded 202 annotations.
+I20260529 17:27:56 PerceptualModel datasets.py:175] Loaded 202 annotations.
+I20260529 17:27:57 PerceptualModel datasets.py:175] Loaded 202 annotations.
+I20260529 17:27:57 SLARM main_slarm.py:396] Processing dataset: waymo
+I20260529 17:27:57 SLARM main_slarm.py:397] train: /efs-large-spatial-model-2/waymo_storm_processed/STORM_data/scene_list/waymo_train.txt, val: /efs-large-spatial-model-2/waymo_storm_processed/STORM_data/scene_list/waymo_val.txt
+I20260529 17:27:57 SLARM main_slarm.py:474] Dataset ['waymo'] contains 798 training sequences in total.
+I20260529 17:28:06 SLARM main_slarm.py:478] Model = SLARM(
+  (decoder): DummyDecoder()
+  (aggregator): Aggregator(
+    (patch_plucker_embed_mlp): Linear(in_features=6, out_features=768, bias=True)
+    (patch_embed): PatchEmbed(
+      (proj): Conv2d(3, 768, kernel_size=(8, 8), stride=(8, 8))
+      (norm): Identity()
+    )
+    (rope): RotaryPositionEmbedding2D()
+    (frame_blocks): ModuleList(
+      (0-11): 12 x Block(
+        (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+        (attn): Attention(
+          (qkv): Linear(in_features=768, out_features=2304, bias=True)
+          (q_norm): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+          (k_norm): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+          (attn_drop): Dropout(p=0.0, inplace=False)
+          (proj): Linear(in_features=768, out_features=768, bias=True)
+          (proj_drop): Dropout(p=0.0, inplace=False)
+          (rope): RotaryPositionEmbedding2D()
+        )
+        (ls1): LayerScale()
+        (drop_path1): Identity()
+        (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+        (mlp): Mlp(
+          (fc1): Linear(in_features=768, out_features=3072, bias=True)
+          (act): GELU(approximate='none')
+          (fc2): Linear(in_features=3072, out_features=768, bias=True)
+          (drop): Dropout(p=0.0, inplace=False)
+        )
+        (ls2): LayerScale()
+        (drop_path2): Identity()
+      )
+    )
+    (global_blocks): ModuleList(
+      (0-11): 12 x Block(
+        (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+        (attn): Attention(
+          (qkv): Linear(in_features=768, out_features=2304, bias=True)
+          (q_norm): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+          (k_norm): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+          (attn_drop): Dropout(p=0.0, inplace=False)
+          (proj): Linear(in_features=768, out_features=768, bias=True)
+          (proj_drop): Dropout(p=0.0, inplace=False)
+          (rope): RotaryPositionEmbedding2D()
+        )
+        (ls1): LayerScale()
+        (drop_path1): Identity()
+        (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+        (mlp): Mlp(
+          (fc1): Linear(in_features=768, out_features=3072, bias=True)
+          (act): GELU(approximate='none')
+          (fc2): Linear(in_features=3072, out_features=768, bias=True)
+          (drop): Dropout(p=0.0, inplace=False)
+        )
+        (ls2): LayerScale()
+        (drop_path2): Identity()
+      )
+    )
+    (plucker_embedder): PluckerEmbedder()
+    (time_embedder): TimestepEmbedder(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=768, bias=True)
+        (1): SiLU(inplace=True)
+        (2): Linear(in_features=768, out_features=768, bias=True)
+      )
+    )
+  )
+  (plucker_embedder): PluckerEmbedder()
+  (motion_basis_decoder): Mlp(
+    (fc1): Linear(in_features=32, out_features=256, bias=True)
+    (act): GELU(approximate='none')
+    (fc2): Linear(in_features=256, out_features=16, bias=True)
+  )
+  (affine_token_norm): LayerNorm((1536,), eps=1e-05, elementwise_affine=True)
+  (affine_linear): Linear(in_features=1536, out_features=12, bias=True)
+  (sky_token_norm): LayerNorm((1536,), eps=1e-05, elementwise_affine=True)
+  (sky_head): ModulatedLinearLayer(
+    (linear): Linear(in_features=3, out_features=512, bias=True)
+    (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=False)
+    (adaLN_modulation): Sequential(
+      (0): SiLU()
+      (1): Linear(in_features=512, out_features=1024, bias=True)
+    )
+    (condition_mapping): Linear(in_features=1536, out_features=512, bias=True)
+    (output): Linear(in_features=512, out_features=3, bias=True)
+  )
+  (aggregated_last_tokens_norm): LayerNorm((1536,), eps=1e-05, elementwise_affine=True)
+  (gs_pred): Linear(in_features=1536, out_features=2048, bias=True)
+  (output_upscaling): Sequential(
+    (0): ConvTranspose2d(1536, 512, kernel_size=(2, 2), stride=(2, 2))
+    (1): LayerNorm2d()
+    (2): GELU(approximate='none')
+    (3): ConvTranspose2d(512, 256, kernel_size=(2, 2), stride=(2, 2))
+    (4): LayerNorm2d()
+    (5): GELU(approximate='none')
+    (6): ConvTranspose2d(256, 128, kernel_size=(2, 2), stride=(2, 2))
+    (7): LayerNorm2d()
+    (8): GELU(approximate='none')
+  )
+  (gs_pred_with_rgb): Linear(in_features=35, out_features=12, bias=True)
+  (motion_key_head): Mlp(
+    (fc1): Linear(in_features=128, out_features=256, bias=True)
+    (act): GELU(approximate='none')
+    (fc2): Linear(in_features=256, out_features=32, bias=True)
+  )
+  (feat_pred): Linear(in_features=1536, out_features=4096, bias=True)
+  (feat_decoder): Sequential(
+    (0): Linear(in_features=64, out_features=128, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=128, out_features=256, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=256, out_features=512, bias=True)
+  )
+  (feat_decoders): ModuleList(
+    (0): Sequential(
+      (0): Linear(in_features=64, out_features=128, bias=True)
+      (1): ReLU()
+      (2): Linear(in_features=128, out_features=256, bias=True)
+      (3): ReLU()
+      (4): Linear(in_features=256, out_features=512, bias=True)
+    )
+  )
+)
+I20260529 17:28:06 SLARM main_slarm.py:480] slarm Parameters: 185.92M (185,920,495)
+I20260529 17:28:06 SLARM main_slarm.py:488] Optimizer = AdamW (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.95)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0004
+    maximize: False
+    weight_decay: 0.0
+
+Parameter Group 1
+    amsgrad: False
+    betas: (0.9, 0.95)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0004
+    maximize: False
+    weight_decay: 0.05
+)
+I20260529 17:28:06 SLARM main_slarm.py:489] Loss Scaler = <src.utils.misc.NativeScalerWithGradNormCount object at 0xffff0a9d9750>
+I20260529 17:28:06 SLARM main_slarm.py:492] Original start Iteration: 0
+I20260529 17:28:06 PerceptualModel misc.py:130] Loading checkpoint from: ckpts/ckpt_199999.pth
+E20260529 17:28:17 PerceptualModel misc.py:151] Error(s) in loading state_dict for SLARM:
+	size mismatch for aggregator.plucker_embedder.x: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+	size mismatch for aggregator.plucker_embedder.y: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+	size mismatch for plucker_embedder.x: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+	size mismatch for plucker_embedder.y: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+I20260529 17:28:17 PerceptualModel misc.py:152] [Model-init] Loading model from ckpts/ckpt_199999.pth failed. Error: Error(s) in loading state_dict for SLARM:
+	size mismatch for aggregator.plucker_embedder.x: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+	size mismatch for aggregator.plucker_embedder.y: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+	size mismatch for plucker_embedder.x: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+	size mismatch for plucker_embedder.y: copying a param with shape torch.Size([1, 38400]) from checkpoint, the shape in current model is torch.Size([1, 49152]).
+I20260529 17:28:17 PerceptualModel misc.py:161] Skipping parameter due to shape mismatch: aggregator.plucker_embedder.x (torch.Size([1, 38400]) vs torch.Size([1, 49152]))
+I20260529 17:28:17 PerceptualModel misc.py:161] Skipping parameter due to shape mismatch: aggregator.plucker_embedder.y (torch.Size([1, 38400]) vs torch.Size([1, 49152]))
+I20260529 17:28:17 PerceptualModel misc.py:161] Skipping parameter due to shape mismatch: plucker_embedder.x (torch.Size([1, 38400]) vs torch.Size([1, 49152]))
+I20260529 17:28:17 PerceptualModel misc.py:161] Skipping parameter due to shape mismatch: plucker_embedder.y (torch.Size([1, 38400]) vs torch.Size([1, 49152]))
+I20260529 17:28:17 PerceptualModel misc.py:171] Load status: _IncompatibleKeys(missing_keys=['aggregator.plucker_embedder.x', 'aggregator.plucker_embedder.y', 'plucker_embedder.x', 'plucker_embedder.y'], unexpected_keys=[])
+I20260529 17:28:17 SLARM main_slarm.py:494] New start iteration 0
+I20260529 17:28:18 SLARM main_slarm.py:502] Global batch size: 128
+I20260529 17:28:18 SLARM main_slarm.py:503] Base lr: 8.00e-04, Actual lr: 4.00e-04
+I20260529 17:28:18 SLARM main_slarm.py:506] slarm Trainable Parameters: 185.92M
+I20260529 17:28:18 SLARM main_slarm.py:507] Training with 64 GPUs
+I20260529 17:28:18 SLARM main_slarm.py:513] Using online feature, loading feature extractor.
+W20260529 17:28:19 py.warnings warnings.py:109] /home/ma-user/anaconda3/envs/render_lta2/lib/python3.10/site-packages/clip/clip.py:54: ResourceWarning: unclosed file <_io.BufferedReader name='/root/.cache/clip/ViT-B-32.pt'>
+  if hashlib.sha256(open(download_target, "rb").read()).hexdigest() == expected_sha256:
+
+Loading lseg_pretrained from ckpts/lseg/lseg_model_pretrained_2.pth.
+lseg_pretrained loaded.
+Loading lseg_scratch from ckpts/lseg/lseg_model_scratch.pth.
+lseg_scratch loaded.
+I20260529 17:28:42 SLARM main_slarm.py:515] Feature extractor loaded.
+I20260529 17:28:42 PerceptualModel engine_tools.py:114] saving video to ./work_dirs/slarm/exp_0529_192-256/videos/step0-rank0-sample0-train.mp4
+I20260529 17:29:08 PerceptualModel video_maker.py:91] Time taken to forward rendered results: 5.9646216430701315 seconds
+W20260529 17:29:09 imageio_ffmpeg _io.py:561] IMAGEIO FFMPEG_WRITER WARNING: input image is not divisible by macro_block_size=16, resizing from (1608, 1528) to (1616, 1536) to ensure video compatibility with most codecs and players. To prevent resizing, make your input image divisible by the macro_block_size or set the macro_block_size to 1 (risking incompatibility).
+add_video needs package moviepy
+I20260529 17:29:11 PerceptualModel engine_tools.py:130] saved video to ./work_dirs/slarm/exp_0529_192-256/videos/step0-rank0-sample0-train.mp4
+I20260529 17:29:11 PerceptualModel engine_tools.py:114] saving video to ./work_dirs/slarm/exp_0529_192-256/videos/step0-rank0-sample0-val.mp4
+I20260529 17:30:03 PerceptualModel video_maker.py:91] Time taken to forward rendered results: 3.665587696246803 seconds
+W20260529 17:30:04 imageio_ffmpeg _io.py:561] IMAGEIO FFMPEG_WRITER WARNING: input image is not divisible by macro_block_size=16, resizing from (1608, 1528) to (1616, 1536) to ensure video compatibility with most codecs and players. To prevent resizing, make your input image divisible by the macro_block_size or set the macro_block_size to 1 (risking incompatibility).
+add_video needs package moviepy
+I20260529 17:30:05 PerceptualModel engine_tools.py:130] saved video to ./work_dirs/slarm/exp_0529_192-256/videos/step0-rank0-sample0-val.mp4
+W20260529 17:30:09 py.warnings warnings.py:109] /home/ma-user/anaconda3/envs/render_lta2/lib/python3.10/site-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+
+W20260529 17:30:09 py.warnings warnings.py:109] /home/ma-user/anaconda3/envs/render_lta2/lib/python3.10/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=VGG16_Weights.IMAGENET1K_V1`. You can also use `weights=VGG16_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+
+Warning: since the loaded file is not a zipfile, only "torch.device" and "str" type parameters are currently supported for parameter types of map_location. If parameter types of map_location is "Callable[[torch.Tensor, str], torch.Tensor]" or "Dict[str, str]", which is only support for zipfile, all tensors are currently loaded onto the CPU, which may introduce problems
+loaded pretrained LPIPS loss from ckpts/lpips/vgg.pth
+I20260529 17:30:10 SLARM main_slarm.py:575] Starting training from iteration 0 to 200000
+I20260529 17:30:28 PerceptualModel logging.py:168] Training  [     0/200000]  eta: 41 days, 2:36:36  elapsed: 0:00:17  lr: 0.0000 (0.0000)  psnr: 22.6294 (22.6294)  loss: 0.0597 (0.0597)  context_feat_loss: 0.0001 (0.0001)  rgb_loss: 0.0055 (0.0055)  rgb_mse: 0.0055 (0.0055)  depth_loss: 0.0519 (0.0519)  flow_reg_loss: 0.0001 (0.0001)  sky_opacity_loss: 0.0021 (0.0021)  grad_norm: 7.7809 (7.7809)  time: 17.7590  data: 6.5359  max mem: 52947
+I20260529 17:33:49 PerceptualModel logging.py:168] Training  [    50/200000]  eta: 9 days, 22:26:04  elapsed: 0:03:38  lr: 0.0000 (0.0000)  psnr: 23.8305 (23.2539)  loss: 0.0483 (0.0546)  context_feat_loss: 0.0001 (0.0001)  rgb_loss: 0.0041 (0.0048)  rgb_mse: 0.0041 (0.0048)  depth_loss: 0.0417 (0.0476)  flow_reg_loss: 0.0001 (0.0001)  sky_opacity_loss: 0.0019 (0.0021)  grad_norm: 7.1189 (7.5572)  time: 3.9860  data: 0.0195  max mem: 54383
+I20260529 17:37:11 PerceptualModel logging.py:168] Training  [   100/200000]  eta: 9 days, 15:32:38  elapsed: 0:07:01  lr: 0.0000 (0.0000)  psnr: 25.7778 (24.2633)  loss: 0.0258 (0.0424)  context_feat_loss: 0.0001 (0.0001)  rgb_loss: 0.0026 (0.0039)  rgb_mse: 0.0026 (0.0039)  depth_loss: 0.0216 (0.0365)  flow_reg_loss: 0.0002 (0.0002)  sky_opacity_loss: 0.0014 (0.0018)  grad_norm: 0.6787 (4.8946)  time: 4.1265  data: 0.0179  max mem: 54383
+I20260529 17:41:05 PerceptualModel logging.py:168] Training  [   150/200000]  eta: 10 days, 0:54:28  elapsed: 0:10:55  lr: 0.0000 (0.0000)  psnr: 26.5967 (24.9388)  loss: 0.0211 (0.0358)  context_feat_loss: 0.0001 (0.0001)  rgb_loss: 0.0022 (0.0034)  rgb_mse: 0.0022 (0.0034)  depth_loss: 0.0174 (0.0305)  flow_reg_loss: 0.0002 (0.0002)  sky_opacity_loss: 0.0013 (0.0016)  grad_norm: 0.2782 (3.3758)  time: 4.8875  data: 0.0120  max mem: 54383
+I20260529 17:44:55 PerceptualModel logging.py:168] Training  [   200/200000]  eta: 10 days, 4:17:08  elapsed: 0:14:44  lr: 0.0000 (0.0000)  psnr: 26.7879 (25.3564)  loss: 0.0184 (0.0317)  context_feat_loss: 0.0000 (0.0001)  rgb_loss: 0.0021 (0.0031)  rgb_mse: 0.0021 (0.0031)  depth_loss: 0.0150 (0.0268)  flow_reg_loss: 0.0001 (0.0002)  sky_opacity_loss: 0.0012 (0.0016)  grad_norm: 0.2505 (2.5971)  time: 4.6461  data: 0.0121  max mem: 54383
+I20260529 17:48:59 PerceptualModel logging.py:168] Training  [   250/200000]  eta: 10 days, 9:31:01  elapsed: 0:18:48  lr: 0.0000 (0.0000)  psnr: 27.0855 (25.6921)  loss: 0.0169 (0.0288)  context_feat_loss: 0.0000 (0.0001)  rgb_loss: 0.0020 (0.0029)  rgb_mse: 0.0020 (0.0029)  depth_loss: 0.0136 (0.0243)  flow_reg_loss: 0.0001 (0.0002)  sky_opacity_loss: 0.0012 (0.0015)  grad_norm: 0.3169 (2.1532)  time: 4.4123  data: 0.0125  max mem: 54383
+I20260529 17:52:39 PerceptualModel logging.py:168] Training  [   300/200000]  eta: 10 days, 8:36:00  elapsed: 0:22:29  lr: 0.0000 (0.0000)  psnr: 27.1114 (25.9330)  loss: 0.0160 (0.0267)  context_feat_loss: 0.0000 (0.0001)  rgb_loss: 0.0019 (0.0027)  rgb_mse: 0.0019 (0.0027)  depth_loss: 0.0126 (0.0224)  flow_reg_loss: 0.0001 (0.0002)  sky_opacity_loss: 0.0012 (0.0014)  grad_norm: 0.4319 (1.8612)  time: 4.4397  data: 0.0125  max mem: 54383

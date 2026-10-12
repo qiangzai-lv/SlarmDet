@@ -1,0 +1,28 @@
+{
+    "train_micro_batch_size_per_gpu": 1,
+    "gradient_accumulation_steps": 1,
+    "zero_optimization": {
+        "stage": 2,
+        "overlap_comm": true,
+        "contiguous_gradients": false,
+        "reduce_bucket_size": 2e8,
+        "allgather_bucket_size": 2e8
+    },
+    "zero_allow_untested_optimizer": true,
+    "torch_autocast": {
+        "enabled": true,
+        "dtype": "bfloat16",
+        "lower_precision_safe_modules": []
+    },
+    "gradient_clipping": 3.0,
+    "prescale_gradients": false,
+    "wall_clock_breakdown": false,
+    "flops_profiler": {
+        "enabled": false,
+        "profile_step": 20,
+        "module_depth": -1,
+        "top_modules": 1,
+        "detailed": true,
+        "output_file": "ds_prof.log"
+    }
+}
