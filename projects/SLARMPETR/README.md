@@ -76,6 +76,61 @@ reduce `optim_wrapper.paramwise_cfg.custom_keys.img_backbone.lr_mult` to an
 appropriate value such as 0.1. To resume this detector's own training state,
 use the ordinary `--resume` option; this differs from encoder initialization.
 
+## LoRA fine-tuning
+
+`configs/slarm_petr_singleframe_lora.py` inherits the current encoder architecture
+and sets the adapter input channels to `2 * embed_dim` (4096 for embed_dim 2048).
+It injects LoRA into `attn.qkv` and `attn.proj` of both `frame_blocks` and
+`global_blocks`, at zero-based indices `[8, 9, 10, 11]`. Defaults are rank 8,
+alpha 16, dropout 0. Trainable parameters are LoRA A/B, **all six affine token
+slots**, the feature adapter and PETRHead. Other pretrained encoder parameters
+and output normalization are frozen. `train_feature_norm=True` optionally
+unfreezes the latter. This mode requires `frozen=False` and
+`unfreeze_last_blocks=None`.
+
+Supply matching pretrained weights before meaningful fine-tuning:
+
+```bash
+bash tools/dist_train.sh projects/SLARMPETR/configs/slarm_petr_singleframe_lora.py 1 \
+  --cfg-options model.img_backbone.checkpoint=/absolute/path/to/slarm.pth
+```
+
+No weight path is assumed. Without a base checkpoint or detector `load_from` /
+`resume`, a warning explains that the frozen base is random. Verify embed_dim,
+depth, heads, patch size and token/embedding switches against the source model;
+LoRA cannot convert a 2048-dimensional pretrained model to 768 dimensions.
+The inherited image size, downsampling, optimizer and schedule are retained.
+The current repeat-based 3-to-6 affine expansion is enabled; affine tokens are
+copied only during initialization and then independently optimized.
+
+LoRA preserves original weight/bias names. A uses Kaiming initialization and B
+starts at zero; generic Linear initialization never overwrites this rule.
+The base checkpoint loader permits only the added adapter tensors to be absent.
+Partially present adapters, missing base tensors and mismatched shapes fail.
+Normal MMEngine checkpoints include the full model (frozen base, adapters,
+affine tokens, normalization, neck/head) and optimizer; use `--resume` to restore
+training. Adapter-only export and weight merging are not enabled.
+
+Since affine tokens enter at the first layer, their gradient flows through the
+whole frozen encoder. Non-reentrant gradient checkpointing starts at block 0;
+freezing weights does not wrap the LoRA forward in `no_grad()`. LoRA reduces
+optimizer/gradient storage, but full-resolution attention activations still
+cost memory. The existing `use_bf16` implementation enables internal autocast
+on CUDA only; NPU precision must be set by its actual supported training setup.
+
+Bounded checks (small encoder, real nuScenes images; no convergence claim):
+
+```bash
+PYTHONPATH=. python tests/test_projects/test_slarm_petr_lora.py
+PYTHONPATH=. python projects/SLARMPETR/tools/smoke_test.py --lora --small --device cuda
+CUDA_VISIBLE_DEVICES='' PYTHONPATH=. torchrun --standalone --nproc_per_node=2 \
+  projects/SLARMPETR/tools/smoke_test.py --lora --ddp
+CUDA_VISIBLE_DEVICES='' PYTHONPATH=. python projects/SLARMPETR/tools/runner_smoke_test.py --lora
+```
+
+The runner check trains two iterations, validates two samples by JSON formatting,
+saves a temporary full checkpoint, and resumes one more iteration.
+
 ## Tests
 
 ```bash

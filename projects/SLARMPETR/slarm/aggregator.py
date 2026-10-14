@@ -84,6 +84,7 @@ class Aggregator(nn.Module):
         self.add_patch_plucker_embed = add_patch_plucker_embed
         self.add_camera_embed = add_camera_embed
         self.grad_checkpointing = grad_checkpointing
+        self.checkpoint_start_block = 0
 
         if self.concat_plucker_embed:
             self.in_chans += 6
@@ -384,7 +385,8 @@ class Aggregator(nn.Module):
 
         # by default, self.aa_block_size=1, which processes one block at a time
         for _ in range(self.aa_block_size):
-            if self.training and self.grad_checkpointing:
+            if (self.training and self.grad_checkpointing and torch.is_grad_enabled()
+                    and frame_idx >= self.checkpoint_start_block):
                 tokens = checkpoint(
                     self.frame_blocks[frame_idx],
                     tokens,
@@ -413,7 +415,8 @@ class Aggregator(nn.Module):
         # by default, self.aa_block_size=1, which processes one block at a time
         for _ in range(self.aa_block_size):
             if kv_cache is not None:
-                if self.training and self.grad_checkpointing:
+                if (self.training and self.grad_checkpointing and torch.is_grad_enabled()
+                        and global_idx >= self.checkpoint_start_block):
                     tokens, kv_cache = checkpoint(
                         self.global_blocks[global_idx],
                         tokens,
@@ -425,7 +428,8 @@ class Aggregator(nn.Module):
                 else:
                     tokens, kv_cache = self.global_blocks[global_idx](tokens, pos, attn_mask, kv_cache)
             else:
-                if self.training and self.grad_checkpointing:
+                if (self.training and self.grad_checkpointing and torch.is_grad_enabled()
+                        and global_idx >= self.checkpoint_start_block):
                     tokens = checkpoint(
                         self.global_blocks[global_idx],
                         tokens,

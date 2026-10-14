@@ -10,6 +10,8 @@ from torch import nn
 
 from mmdet3d.registry import MODELS
 from .slarm.aggregator import Aggregator
+from .slarm_lora import (LoRALinear, configure_slarm_lora,
+                         enable_lora_parameters, lora_parameter_name)
 
 
 PETR_CAMERAS = ('CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT',
@@ -30,7 +32,7 @@ class SLARMFeatureBackbone(BaseModule):
     def __init__(self, embed_dim=768, depth=12, num_heads=16, patch_size=8,
                  encoder_size=(160, 288), checkpoint=None,
                  frozen=False, unfreeze_last_blocks=None, use_bf16=True,
-                 expand_affine_tokens=False, aggregator_cfg=None):
+                 expand_affine_tokens=False, aggregator_cfg=None, lora_cfg=None):
         super().__init__()
         self.embed_dim = embed_dim
         self.patch_size = patch_size
@@ -60,9 +62,22 @@ class SLARMFeatureBackbone(BaseModule):
             raise ValueError('Initial integration supports Conv patch checkpoints only')
         self.aggregator = Aggregator(**cfg)
         self.feature_norm = nn.LayerNorm(2 * embed_dim)
+        self.lora_cfg, self.lora_modules = configure_slarm_lora(self.aggregator, lora_cfg)
+        self.lora_enabled = self.lora_cfg['enabled']
+        if self.lora_enabled and (frozen or unfreeze_last_blocks is not None):
+            raise ValueError('LoRA requires frozen=False and unfreeze_last_blocks=None')
         self._set_trainability()
+        if self.lora_enabled:
+            trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+            MMLogger.get_current_instance().info(
+                f'SLARM LoRA: config={self.lora_cfg}, '
+                f'modules={self.lora_modules}, trainable_backbone_parameters={trainable}')
 
     def _set_trainability(self):
+        if self.lora_enabled:
+            enable_lora_parameters(self.aggregator, self.lora_cfg['train_affine_tokens'])
+            self.feature_norm.requires_grad_(self.lora_cfg['train_feature_norm'])
+            return
         count = self.unfreeze_last_blocks
         train_all = not self.frozen and count is None
         self.aggregator.requires_grad_(train_all)
@@ -74,6 +89,9 @@ class SLARMFeatureBackbone(BaseModule):
 
     def train(self, mode=True):
         super().train(mode)
+        if self.lora_enabled:
+            self._set_trainability()
+            return self
         if self.frozen or self.unfreeze_last_blocks == 0:
             self.aggregator.eval()
             self.feature_norm.eval()
@@ -88,13 +106,23 @@ class SLARMFeatureBackbone(BaseModule):
         if self._is_init:
             return
         # Match SLARM's Linear initialization; Conv/LayerNorm retain defaults.
+        adapters = [m for m in self.modules() if isinstance(m, LoRALinear)]
+        adapter_children = {id(child) for m in adapters for child in (m.lora_a, m.lora_b)}
         for module in self.modules():
-            if isinstance(module, nn.Linear):
+            if (isinstance(module, (nn.Linear, LoRALinear))
+                    and id(module) not in adapter_children):
                 nn.init.trunc_normal_(module.weight, std=0.02)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
+        for module in adapters:
+            module.reset_lora_parameters()
         if self.checkpoint:
             self.load_slarm_checkpoint(self.checkpoint)
+        elif self.lora_enabled:
+            MMLogger.get_current_instance().warning(
+                'LoRA initialized without a SLARM checkpoint. Supply pretrained '
+                'weights via img_backbone.checkpoint or a full detector checkpoint '
+                'via load_from/resume; otherwise the frozen base remains random.')
         self._is_init = True
 
     def load_slarm_checkpoint(self, path):
@@ -107,6 +135,11 @@ class SLARMFeatureBackbone(BaseModule):
             raise ValueError('Checkpoint must contain SLARM aggregator.* keys')
         target = self.aggregator.state_dict()
         derived = {'plucker_embedder.x', 'plucker_embedder.y'}
+        adapter_keys = {k for k in target if lora_parameter_name(k)}
+        # A base SLARM checkpoint has no adapters; a checkpoint containing
+        # adapters must contain the complete set with matching shapes.
+        if not any(lora_parameter_name(k) for k in selected):
+            selected.update({k: target[k] for k in adapter_keys})
         token = 'affine_token'
         if (token in selected and token in target
                 and selected[token].shape != target[token].shape):
@@ -204,7 +237,7 @@ class SLARMFeatureBackbone(BaseModule):
 
     def forward(self, images, metas):
         inputs, inverse_orders = self.prepare_inputs(images, metas)
-        frozen = not any(p.requires_grad for p in self.aggregator.parameters())
+        frozen = not any(p.requires_grad for p in self.parameters())
         grad_context = torch.no_grad() if frozen else contextlib.nullcontext()
         use_amp = self.use_bf16 and images.is_cuda
         if use_amp and not torch.cuda.is_bf16_supported():

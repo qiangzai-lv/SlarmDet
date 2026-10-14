@@ -10,7 +10,7 @@ model = dict(
     img_backbone=dict(
         _delete_=True,
         type='SLARMFeatureBackbone',
-        embed_dim=768,
+        embed_dim=2048,
         depth=12,
         num_heads=16,
         patch_size=8,
@@ -21,7 +21,7 @@ model = dict(
         use_bf16=True,
         expand_affine_tokens=False),
     img_neck=dict(_delete_=True, type='SLARMFeatureAdapter',
-                  in_channels=1536, out_channels=256, downsample=2),
+                  in_channels=4096, out_channels=256, downsample=1),
     pts_bbox_head=dict(type='SLARMPETRHead'))
 
 train_pipeline = _base_.train_pipeline
