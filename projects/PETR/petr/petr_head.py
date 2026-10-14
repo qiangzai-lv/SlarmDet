@@ -374,7 +374,12 @@ class PETRHead(AnchorFreeHead):
         coords = coords.view(1, 1, W, H, D, 4, 1).repeat(B, N, 1, 1, 1, 1, 1)
         img2lidars = img2lidars.view(B, N, 1, 1, 1, 4,
                                      4).repeat(1, 1, W, H, D, 1, 1)
-        coords3d = torch.matmul(img2lidars, coords).squeeze(-1)[..., :3]
+        # NPU matmul does not support these seven-dimensional inputs. Flatten
+        # only the batch axes: each product remains (4, 4) @ (4, 1), with the
+        # same B/N/W/H/D ordering and FP32 coordinate construction as before.
+        coords3d = torch.bmm(img2lidars.reshape(-1, 4, 4),
+                             coords.reshape(-1, 4, 1))
+        coords3d = coords3d.view(B, N, W, H, D, 4)[..., :3]
         coords3d[..., 0:1] = (coords3d[..., 0:1] - self.position_range[0]) / (
             self.position_range[3] - self.position_range[0])
         coords3d[..., 1:2] = (coords3d[..., 1:2] - self.position_range[1]) / (
