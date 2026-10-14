@@ -20,7 +20,7 @@ class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
     'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
 ]
-metainfo = dict(classes=class_names)
+metainfo = dict(classes=class_names, version='v1.0-mini')
 
 input_modality = dict(use_camera=True)
 model = dict(
@@ -31,7 +31,7 @@ model = dict(
         std=[57.375, 57.120, 58.395],
         bgr_to_rgb=False,
         pad_size_divisor=32),
-    use_grid_mask=True,
+    use_grid_mask=False,
     img_backbone=dict(
         type='VoVNetCP',
         spec_name='V-99-eSE',
@@ -176,15 +176,9 @@ train_pipeline = [
         with_attr_label=False),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
+    # Use the same deterministic resize/crop as evaluation.
     dict(
-        type='ResizeCropFlipImage', data_aug_conf=ida_aug_conf, training=True),
-    dict(
-        type='GlobalRotScaleTransImage',
-        rot_range=[-0.3925, 0.3925],
-        translation_std=[0, 0, 0],
-        scale_ratio_range=[0.95, 1.05],
-        reverse_angle=False,
-        training=True),
+        type='ResizeCropFlipImage', data_aug_conf=ida_aug_conf, training=False),
     dict(
         type='Pack3DDetInputs',
         keys=[
@@ -208,6 +202,7 @@ train_dataloader = dict(
     num_workers=4,
     dataset=dict(
         type=dataset_type,
+        ann_file='v1.0-mini_infos_val.pkl',
         data_prefix=dict(
             pts='samples/LIDAR_TOP',
             CAM_FRONT='samples/CAM_FRONT',
@@ -226,6 +221,7 @@ train_dataloader = dict(
 test_dataloader = dict(
     dataset=dict(
         type=dataset_type,
+        ann_file='v1.0-mini_infos_val.pkl',
         data_prefix=dict(
             pts='samples/LIDAR_TOP',
             CAM_FRONT='samples/CAM_FRONT',
@@ -244,6 +240,7 @@ test_dataloader = dict(
 val_dataloader = dict(
     dataset=dict(
         type=dataset_type,
+        ann_file='v1.0-mini_infos_val.pkl',
         data_prefix=dict(
             pts='samples/LIDAR_TOP',
             CAM_FRONT='samples/CAM_FRONT',
@@ -259,6 +256,9 @@ val_dataloader = dict(
         modality=input_modality,
         use_valid_flag=True,
         backend_args=backend_args))
+
+val_evaluator = dict(ann_file=data_root + 'v1.0-mini_infos_val.pkl')
+test_evaluator = dict(ann_file=data_root + 'v1.0-mini_infos_val.pkl')
 
 # Different from original PETR:
 # We don't use special lr for image_backbone
@@ -292,20 +292,17 @@ param_scheduler = [
 
 train_cfg = dict(
     max_epochs=num_epochs,
-    val_begin=num_epochs + 1,
-    val_interval=num_epochs + 1)
+    val_begin=0,
+    val_interval=1)
 
 default_hooks = dict(
     checkpoint=dict(type='CheckpointHook', interval=1))
-
-val_evaluator = dict(format_num_workers=8)
-test_evaluator = dict(format_num_workers=8)
 
 find_unused_parameters = False
 
 # pretrain_path can be found here:
 # https://drive.google.com/file/d/1ABI5BoQCkCkP4B0pO5KBJ3Ni0tei0gZi/view
-load_from = '/mnt/d/fcos3d_vovnet_imgbackbone-remapped.pth'
+load_from = '/data/working/SlarmDet/pretrain/fcos3d_vovnet_imgbackbone-remapped.pth'
 resume = False
 
 # --------------Original---------------

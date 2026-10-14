@@ -5,7 +5,6 @@ from mmcv.transforms import BaseTransform
 from PIL import Image
 
 from mmdet3d.registry import TRANSFORMS
-from mmdet3d.structures.bbox_3d import LiDARInstance3DBoxes
 
 
 @TRANSFORMS.register_module()
@@ -123,9 +122,10 @@ class ResizeCropFlipImage(BaseTransform):
 
 @TRANSFORMS.register_module()
 class GlobalRotScaleTransImage(BaseTransform):
-    """Random resize, Crop and flip the image
-    Args:
-        size (tuple, optional): Fixed padding size.
+    """Rotate and scale 3D boxes while preserving their image projections.
+
+    ``reverse_angle`` reverses the sampled rotation for both boxes and
+    camera extrinsics. Image pixels are unchanged by this transform.
     """
 
     def __init__(
@@ -155,9 +155,9 @@ class GlobalRotScaleTransImage(BaseTransform):
         # random rotate
         rot_angle = np.random.uniform(*self.rot_range)
 
-        self.rotate_bev_along_z(results, rot_angle)
         if self.reverse_angle:
             rot_angle *= -1
+        self.rotate_bev_along_z(results, rot_angle)
         results['gt_bboxes_3d'].rotate(np.array(rot_angle))
 
         # random scale
@@ -166,12 +166,6 @@ class GlobalRotScaleTransImage(BaseTransform):
         results['gt_bboxes_3d'].scale(scale_ratio)
 
         # TODO: support translation
-        if not self.reverse_angle:
-            gt_bboxes_3d = results['gt_bboxes_3d'].numpy()
-            gt_bboxes_3d[:, 6] -= 2 * rot_angle
-            results['gt_bboxes_3d'] = LiDARInstance3DBoxes(
-                gt_bboxes_3d, box_dim=9)
-
         return results
 
     def rotate_bev_along_z(self, results, angle):
@@ -184,9 +178,10 @@ class GlobalRotScaleTransImage(BaseTransform):
         rot_mat_inv = torch.inverse(rot_mat)
         num_view = len(results['lidar2cam'])
         for view in range(num_view):
+            # Column-vector convention: p_aug = R @ p, so E_aug = E @ R^-1.
             results['lidar2cam'][view] = (
-                torch.tensor(np.array(results['lidar2cam'][view]).T).float()
-                @ rot_mat_inv).T.numpy()
+                torch.as_tensor(results['lidar2cam'][view]).float()
+                @ rot_mat_inv).numpy()
 
         return
 
