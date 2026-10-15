@@ -8,3 +8,7 @@ bash tools/dist_test.sh projects/PETR/configs/petr_vovnet_gridmask_p4_800x320.py
 
 
 python tools/create_data.py nuscenes --root-path ./data/nuscenes --out-dir ./data/nuscenes --extra-tag v1.0-mini
+
+
+python3 sample_nuscenes.py nuscenes_infos_val.pkl \
+  -o nuscenes_infos_val_10pct.pkl --ratio 0.1
