@@ -647,11 +647,19 @@ def lidar_nusc_box_to_global(
         global coordinate.
     """
     box_list = []
+    if not boxes:
+        return box_list
+
+    # Calibration is constant within a sample. Keep the original rotate /
+    # translate operations, precision and order; only reuse their inputs.
+    lidar2ego = np.array(info['lidar_points']['lidar2ego'])
+    lidar2ego_rotation = pyquaternion.Quaternion(
+        matrix=lidar2ego, rtol=1e-05, atol=1e-07)
+    ego2global = None
+    ego2global_rotation = None
     for box in boxes:
         # Move box to ego vehicle coord system
-        lidar2ego = np.array(info['lidar_points']['lidar2ego'])
-        box.rotate(
-            pyquaternion.Quaternion(matrix=lidar2ego, rtol=1e-05, atol=1e-07))
+        box.rotate(lidar2ego_rotation)
         box.translate(lidar2ego[:3, 3])
         # filter det in ego.
         cls_range_map = eval_configs.class_range
@@ -660,9 +668,13 @@ def lidar_nusc_box_to_global(
         if radius > det_range:
             continue
         # Move box to global coord system
-        ego2global = np.array(info['ego2global'])
-        box.rotate(
-            pyquaternion.Quaternion(matrix=ego2global, rtol=1e-05, atol=1e-07))
+        # Preserve lazy access: empty/all-filtered predictions never need the
+        # global transform, just as in the original implementation.
+        if ego2global is None:
+            ego2global = np.array(info['ego2global'])
+            ego2global_rotation = pyquaternion.Quaternion(
+                matrix=ego2global, rtol=1e-05, atol=1e-07)
+        box.rotate(ego2global_rotation)
         box.translate(ego2global[:3, 3])
         box_list.append(box)
     return box_list
