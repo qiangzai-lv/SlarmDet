@@ -239,11 +239,17 @@ class SLARMFeatureBackbone(BaseModule):
         inputs, inverse_orders = self.prepare_inputs(images, metas)
         frozen = not any(p.requires_grad for p in self.parameters())
         grad_context = torch.no_grad() if frozen else contextlib.nullcontext()
-        use_amp = self.use_bf16 and images.is_cuda
+        use_amp = self.use_bf16 and images.device.type == 'cuda'
+
         if use_amp and not torch.cuda.is_bf16_supported():
             raise RuntimeError('Set use_bf16=False on GPUs without BF16 support')
-        with grad_context, torch.autocast(images.device.type, dtype=torch.bfloat16,
-                                         enabled=use_amp):
+
+        amp_context = (
+            torch.autocast('cuda', dtype=torch.bfloat16)
+            if use_amp else contextlib.nullcontext()
+        )
+
+        with grad_context, amp_context:
             outputs, start = self.aggregator(inputs, mode='full')
             tokens = self.feature_norm(outputs[-1][:, :, start:].float())
         eh, ew = inputs['context_image'].shape[-2:]
